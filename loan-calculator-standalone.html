@@ -190,6 +190,7 @@
           const [showProfileModal, setShowProfileModal] = useState(false);
           const [showDebugModal, setShowDebugModal] = useState(false);
           const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+          const [showShareModal, setShowShareModal] = useState(false);
           const [newProfileName, setNewProfileName] = useState('');
           const rowsToShow = 12; // Show first year by default
 
@@ -895,6 +896,100 @@
                             Cancel
                           </button>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {showShareModal && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                      <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="text-2xl font-bold text-gray-800">📤 Share LoanWise</h3>
+                          <button
+                            onClick={() => setShowShareModal(false)}
+                            className="text-gray-500 hover:text-gray-700 text-3xl font-bold leading-none"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <p className="text-gray-600 mb-6">Choose how you'd like to share LoanWise with others:</p>
+                        
+                        <div className="space-y-3">
+                          {/* WhatsApp */}
+                          <button
+                            onClick={() => {
+                              const shareText = encodeURIComponent('Check out LoanWise - a FREE loan calculator that helped me plan my EMI and save thousands in interest! 📚💰');
+                              const shareUrl = encodeURIComponent('https://loanwisely.netlify.app/');
+                              window.open(`https://wa.me/?text=${shareText}%20${shareUrl}`, '_blank');
+                              setShowShareModal(false);
+                            }}
+                            className="w-full bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg"
+                          >
+                            <span className="text-2xl">💬</span>
+                            <span>Share on WhatsApp</span>
+                          </button>
+
+                          {/* X (Twitter) */}
+                          <button
+                            onClick={() => {
+                              const shareText = encodeURIComponent('Check out LoanWise - a FREE loan calculator that helped me plan my EMI and save thousands in interest! 📚💰');
+                              const shareUrl = encodeURIComponent('https://loanwisely.netlify.app/');
+                              window.open(`https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`, '_blank');
+                              setShowShareModal(false);
+                            }}
+                            className="w-full bg-black hover:bg-gray-800 text-white px-6 py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg"
+                          >
+                            <span className="text-2xl">𝕏</span>
+                            <span>Share on X (Twitter)</span>
+                          </button>
+
+                          {/* LinkedIn */}
+                          <button
+                            onClick={() => {
+                              const shareUrl = encodeURIComponent('https://loanwisely.netlify.app/');
+                              window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${shareUrl}`, '_blank');
+                              setShowShareModal(false);
+                            }}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg"
+                          >
+                            <span className="text-2xl">💼</span>
+                            <span>Share on LinkedIn</span>
+                          </button>
+
+                          {/* Email */}
+                          <button
+                            onClick={() => {
+                              const subject = encodeURIComponent('Check out LoanWise - Smart Loan Calculator');
+                              const body = encodeURIComponent('Hi!\n\nI wanted to share this amazing FREE loan calculator with you - LoanWise! It helps plan EMI payments and can save thousands in interest.\n\nCheck it out here: https://loanwisely.netlify.app/\n\n📚💰 It\'s completely free and your data stays private in your browser!');
+                              window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                              setShowShareModal(false);
+                            }}
+                            className="w-full bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg"
+                          >
+                            <span className="text-2xl">✉️</span>
+                            <span>Share via Email</span>
+                          </button>
+
+                          {/* Copy Link */}
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText('https://loanwisely.netlify.app/');
+                              alert('✅ Link copied to clipboard! Share it anywhere you like.');
+                              setShowShareModal(false);
+                            }}
+                            className="w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg"
+                          >
+                            <span className="text-2xl">🔗</span>
+                            <span>Copy Link</span>
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => setShowShareModal(false)}
+                          className="w-full mt-4 bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-3 rounded-lg font-semibold transition-all"
+                        >
+                          Cancel
+                        </button>
                       </div>
                     </div>
                   )}
@@ -2109,18 +2204,7 @@
                       </a>
                       
                       <button
-                        onClick={() => {
-                          if (navigator.share) {
-                            navigator.share({
-                              title: 'LoanWise - Smart Loan Calculator',
-                              text: 'Check out LoanWise - a FREE loan calculator that helped me plan my EMI and save thousands in interest! 📚💰',
-                              url: window.location.href
-                            });
-                          } else {
-                            navigator.clipboard.writeText(window.location.href);
-                            alert('✅ Link copied to clipboard! Share it with your friends.');
-                          }
-                        }}
+                        onClick={() => setShowShareModal(true)}
                         className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur text-white px-8 py-4 rounded-xl font-bold transition-all shadow-xl hover:shadow-2xl hover:scale-105 border-2 border-white border-opacity-30"
                       >
                         📤 Share
