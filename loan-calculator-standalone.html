@@ -747,29 +747,6 @@
 
           return (
             <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 md:p-8">
-              {/* Floating Support Button - Professional & Non-intrusive */}
-              <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-3">
-                <a
-                  href="https://buymeacoffee.com/snickers9"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-4 py-3 rounded-full shadow-2xl flex items-center gap-2 font-semibold transition-all hover:scale-105"
-                  title="Support this free tool"
-                >
-                  <span className="text-xl">☕</span>
-                  <span className="hidden md:inline">Support</span>
-                </a>
-                
-                <button
-                  onClick={() => {
-                    document.querySelector('.support-section').scrollIntoView({ behavior: 'smooth' });
-                  }}
-                  className="bg-white bg-opacity-10 hover:bg-opacity-20 backdrop-blur text-white p-3 rounded-full shadow-xl transition-all hover:scale-105"
-                  title="Learn more about supporting"
-                >
-                  <span className="text-xl">❤️</span>
-                </button>
-              </div>
 
               <div className="max-w-7xl mx-auto">
                 
@@ -2154,8 +2131,31 @@
                   )}
                 </div>
 
+                {/* Floating Action Buttons */}
+                <div className="fixed right-6 bottom-24 z-40 flex flex-col gap-3">
+                  <a
+                    href="https://buymeacoffee.com/snickers9"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-gray-900 px-6 py-4 rounded-full font-bold transition-all shadow-2xl hover:shadow-3xl hover:scale-110 flex items-center gap-3"
+                    title="Support LoanWise"
+                  >
+                    <span className="text-2xl">☕</span>
+                    <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap">Support</span>
+                  </a>
+                  
+                  <button
+                    onClick={() => setShowShareModal(true)}
+                    className="group bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white px-6 py-4 rounded-full font-bold transition-all shadow-2xl hover:shadow-3xl hover:scale-110 flex items-center gap-3"
+                    title="Share LoanWise"
+                  >
+                    <span className="text-2xl">❤️</span>
+                    <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap">Share</span>
+                  </button>
+                </div>
+
                 {/* Support Section */}
-                <div className="support-section bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-2xl shadow-2xl p-8 mb-6 text-white">
+                <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-2xl shadow-2xl p-8 mb-6 text-white">
                   <div className="max-w-4xl mx-auto">
                     <div className="text-center mb-8">
                       <div className="flex justify-center mb-4">
@@ -2205,16 +2205,18 @@
                       
                       <button
                         onClick={() => setShowShareModal(true)}
-                        className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur text-white px-8 py-4 rounded-xl font-bold transition-all shadow-xl hover:shadow-2xl hover:scale-105 border-2 border-white border-opacity-30"
+                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-4 rounded-xl font-bold transition-all shadow-xl hover:shadow-2xl hover:scale-105 flex items-center gap-2"
                       >
-                        📤 Share
+                        <span className="text-xl">📤</span>
+                        <span>Share</span>
                       </button>
                       
                       <a
                         href="mailto:didyouknowmyemail@gmail.com?subject=LoanWise - Feedback&body=Hi! I have feedback about LoanWise:%0D%0A%0D%0A"
-                        className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur text-white px-8 py-4 rounded-xl font-bold transition-all shadow-xl hover:shadow-2xl hover:scale-105 border-2 border-white border-opacity-30"
+                        className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur text-white px-8 py-4 rounded-xl font-bold transition-all shadow-xl hover:shadow-2xl hover:scale-105 border-2 border-white border-opacity-30 flex items-center gap-2"
                       >
-                        ✉️ Feedback
+                        <span className="text-xl">✉️</span>
+                        <span>Feedback</span>
                       </a>
                     </div>
                     
@@ -2229,7 +2231,7 @@
                           <span>100% Free • No Ads • No Tracking</span>
                         </p>
                         <p className="mt-3 text-xs opacity-70">
-                          Made with 💜 by Snickers9 for the community
+                          Made with 💜 by LoanWise for the community
                         </p>
                       </div>
                     </div>
@@ -2247,7 +2249,7 @@
                     <span className="text-purple-400 font-bold">📚 LoanWise</span>
                   </p>
                   <p className="text-yellow-500 font-semibold text-sm">Make Smarter Loan Decisions</p>
-                  <p>© {new Date().getFullYear()} - Free Loan Planning Tool by Snickers9</p>
+                  <p>© {new Date().getFullYear()} - Free Loan Planning Tool by LoanWise</p>
                   <p className="text-xs opacity-70 max-w-2xl mx-auto">
                     Plan your EMI • Track Prepayments • Variable ROI Support • Save Thousands in Interest
                   </p>
