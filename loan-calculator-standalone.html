@@ -150,12 +150,12 @@
             loadFromStorage('loanProfiles', {
               'Default': {
                 loanData: {
-            startingBalance: 7355856,
-            startMonth: 'Dec',
-            startYear: 2025
+            startingBalance: 0,
+            startMonth: 'Jan',
+            startYear: new Date().getFullYear()
                 },
-                roiPeriods: [{ month: 'Dec', year: 2025, roi: 7.7 }],
-                emiPeriods: [{ month: 'Dec', year: 2025, emi: 79950 }],
+                roiPeriods: [],
+                emiPeriods: [],
                 prepayments: []
               }
             })
@@ -170,20 +170,20 @@
 
           const [newRoiPeriod, setNewRoiPeriod] = useState({
             month: 'Jan',
-            year: 2026,
-            roi: 7.7
+            year: new Date().getFullYear(),
+            roi: ''
           });
 
           const [newEmiPeriod, setNewEmiPeriod] = useState({
             month: 'Jan',
-            year: 2026,
-            emi: 79950
+            year: new Date().getFullYear(),
+            emi: ''
           });
 
           const [newPrepayment, setNewPrepayment] = useState({
-            month: 'Mar',
-            year: 2026,
-            amount: 200000
+            month: 'Jan',
+            year: new Date().getFullYear(),
+            amount: ''
           });
 
           const [showAllRows, setShowAllRows] = useState(false);
@@ -192,7 +192,7 @@
           const [showRecoveryModal, setShowRecoveryModal] = useState(false);
           const [showShareModal, setShowShareModal] = useState(false);
           const [newProfileName, setNewProfileName] = useState('');
-          const rowsToShow = 12; // Show first year by default
+          const rowsToShow = 12; // Fallback when current month not found
 
           // Save to localStorage whenever data changes
           useEffect(() => {
@@ -252,7 +252,7 @@
               }
               
               // Find the applicable ROI (most recent ROI period before or at this month)
-              let applicableRoi = sortedRoiPeriods[0]?.roi || 7.7;
+              let applicableRoi = sortedRoiPeriods[0]?.roi || 0;
               for (const period of sortedRoiPeriods) {
                 const periodMonthIdx = months.indexOf(period.month);
                 const currentMonthIdx = months.indexOf(month);
@@ -276,7 +276,7 @@
               }
               
               // Find the applicable EMI (most recent EMI period before or at this month)
-              let applicableEmi = sortedEmiPeriods[0]?.emi || 79950;
+              let applicableEmi = sortedEmiPeriods[0]?.emi || 0;
               for (const period of sortedEmiPeriods) {
                 const periodMonthIdx = months.indexOf(period.month);
                 const currentMonthIdx = months.indexOf(month);
@@ -387,8 +387,8 @@
             }
 
             // Calculate without prepayment scenario (using current ROI and EMI at start)
-            const startingRoi = sortedRoiPeriods[0]?.roi || 7.7;
-            const startingEmi = sortedEmiPeriods[0]?.emi || 79950;
+            const startingRoi = sortedRoiPeriods[0]?.roi || 0;
+            const startingEmi = sortedEmiPeriods[0]?.emi || 0;
             const withoutPrepaymentTenure = calculateTenure(loanData.startingBalance, startingEmi, startingRoi);
             const withoutPrepaymentInterest = withoutPrepaymentTenure < 999 
               ? Math.round(startingEmi * withoutPrepaymentTenure - loanData.startingBalance)
@@ -474,8 +474,9 @@
           };
 
           const addRoiPeriod = () => {
-            if (newRoiPeriod.roi > 0) {
-              const updated = [...roiPeriods, { ...newRoiPeriod }];
+            const roiValue = parseFloat(newRoiPeriod.roi);
+            if (roiValue > 0) {
+              const updated = [...roiPeriods, { month: newRoiPeriod.month, year: newRoiPeriod.year, roi: roiValue }];
               // Sort ROI periods by date
               updated.sort((a, b) => {
                 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -484,7 +485,7 @@
               });
               setRoiPeriods(updated);
               
-              // Auto-increment month for next ROI period
+              // Auto-increment month and clear ROI value
               const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
               const currentMonthIdx = months.indexOf(newRoiPeriod.month);
               const nextMonthIdx = (currentMonthIdx + 1) % 12;
@@ -492,28 +493,25 @@
               setNewRoiPeriod({
                 month: months[nextMonthIdx],
                 year: nextYear,
-                roi: newRoiPeriod.roi
+                roi: ''
               });
             }
           };
 
           const removeRoiPeriod = (index) => {
-            if (roiPeriods.length > 1) {
               setRoiPeriods(roiPeriods.filter((_, i) => i !== index));
-            } else {
-              alert('You must have at least one ROI period!');
-            }
           };
 
           const clearAllRoiPeriods = () => {
-            if (confirm('Reset to single ROI period?')) {
-              setRoiPeriods([{ month: loanData.startMonth, year: loanData.startYear, roi: 7.7 }]);
+            if (confirm('Clear all ROI periods?')) {
+              setRoiPeriods([]);
             }
           };
 
           const addEmiPeriod = () => {
-            if (newEmiPeriod.emi > 0) {
-              const updated = [...emiPeriods, { ...newEmiPeriod }];
+            const emiValue = parseFloat(newEmiPeriod.emi);
+            if (emiValue > 0) {
+              const updated = [...emiPeriods, { month: newEmiPeriod.month, year: newEmiPeriod.year, emi: emiValue }];
               // Sort EMI periods by date
               updated.sort((a, b) => {
                 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -522,7 +520,7 @@
               });
               setEmiPeriods(updated);
               
-              // Auto-increment month for next EMI period
+              // Auto-increment month and clear EMI value
               const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
               const currentMonthIdx = months.indexOf(newEmiPeriod.month);
               const nextMonthIdx = (currentMonthIdx + 1) % 12;
@@ -530,22 +528,18 @@
               setNewEmiPeriod({
                 month: months[nextMonthIdx],
                 year: nextYear,
-                emi: newEmiPeriod.emi
+                emi: ''
               });
             }
           };
 
           const removeEmiPeriod = (index) => {
-            if (emiPeriods.length > 1) {
               setEmiPeriods(emiPeriods.filter((_, i) => i !== index));
-            } else {
-              alert('You must have at least one EMI period!');
-            }
           };
 
           const clearAllEmiPeriods = () => {
-            if (confirm('Reset to single EMI period?')) {
-              setEmiPeriods([{ month: loanData.startMonth, year: loanData.startYear, emi: 79950 }]);
+            if (confirm('Clear all EMI periods?')) {
+              setEmiPeriods([]);
             }
           };
 
@@ -556,8 +550,8 @@
                 startMonth: 'Jan',
                 startYear: new Date().getFullYear()
               });
-              setRoiPeriods([{ month: 'Jan', year: new Date().getFullYear(), roi: 7.7 }]);
-              setEmiPeriods([{ month: 'Jan', year: new Date().getFullYear(), emi: 0 }]);
+              setRoiPeriods([]);
+              setEmiPeriods([]);
               setPrepayments([]);
             }
           };
@@ -648,8 +642,9 @@
           };
 
           const addPrepayment = () => {
-            if (newPrepayment.amount > 0) {
-              const updated = [...prepayments, { ...newPrepayment }];
+            const amountValue = parseFloat(newPrepayment.amount);
+            if (amountValue > 0) {
+              const updated = [...prepayments, { month: newPrepayment.month, year: newPrepayment.year, amount: amountValue }];
               // Sort prepayments by date
               updated.sort((a, b) => {
                 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -658,7 +653,7 @@
               });
               setPrepayments(updated);
               
-              // Auto-increment month for next prepayment
+              // Auto-increment month and clear amount
               const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
               const currentMonthIdx = months.indexOf(newPrepayment.month);
               const nextMonthIdx = (currentMonthIdx + 1) % 12;
@@ -666,7 +661,7 @@
               setNewPrepayment({
                 month: months[nextMonthIdx],
                 year: nextYear,
-                amount: newPrepayment.amount
+                amount: ''
               });
             }
           };
@@ -766,10 +761,10 @@
                     </div>
                     <button
                       onClick={resetAllData}
-                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors shadow-lg"
+                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg"
                       title="Reset all data"
                     >
-                      🔄 Reset All
+                      🔄 Reset
                     </button>
                   </div>
                   <div className="bg-white bg-opacity-10 backdrop-blur rounded-lg p-3 mt-3">
@@ -779,29 +774,29 @@
                   </div>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-2xl p-6 mb-6">
+                <div className="bg-white rounded-xl shadow-lg p-5 mb-6">
                   <div className="flex justify-between items-center mb-4">
                     <div>
-                      <h2 className="text-2xl font-bold text-gray-800">User Profiles</h2>
-                      <p className="text-sm text-gray-600 mt-1">Currently viewing: <strong className="text-indigo-600">{currentProfile}</strong></p>
+                      <h3 className="text-xl font-bold text-gray-800">👤 Profiles</h3>
+                      <p className="text-xs text-gray-600 mt-0.5">Active: <strong className="text-indigo-600">{currentProfile}</strong></p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
                       <button
                         onClick={() => setShowRecoveryModal(true)}
-                        className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors"
-                        title="Check localStorage for recoverable data"
+                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition-all shadow-sm hover:shadow-md"
+                        title="Data recovery"
                       >
-                        🔧 Recovery Tool
+                        🔧
                       </button>
                       <button
                         onClick={exportAllProfiles}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors"
-                        title="Backup all profiles"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition-all shadow-sm hover:shadow-md"
+                        title="Backup"
                       >
-                        💾 Backup
+                        💾
                       </button>
-                      <label className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors cursor-pointer">
-                        📥 Restore
+                      <label className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition-all shadow-sm hover:shadow-md cursor-pointer">
+                        📥
                         <input
                           type="file"
                           accept=".json"
@@ -811,21 +806,21 @@
                       </label>
                       <button
                         onClick={() => setShowProfileModal(true)}
-                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors"
+                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition-all shadow-sm hover:shadow-md"
                       >
-                        + New Profile
+                        + New
                       </button>
                     </div>
                   </div>
                   
                   <div className="flex gap-2 flex-wrap">
                     {Object.keys(profiles).map(profileName => (
-                      <div key={profileName} className="flex items-center gap-2">
+                      <div key={profileName} className="flex items-center gap-1">
                         <button
                           onClick={() => switchProfile(profileName)}
-                          className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                          className={`px-3 py-1.5 rounded-lg font-semibold text-sm transition-all shadow-sm ${
                             currentProfile === profileName
-                              ? 'bg-indigo-600 text-white'
+                              ? 'bg-indigo-600 text-white shadow-md'
                               : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                           }`}
                         >
@@ -834,8 +829,8 @@
                         {profileName !== 'Default' && (
                           <button
                             onClick={() => deleteProfile(profileName)}
-                            className="text-red-500 hover:text-red-700 font-bold"
-                            title="Delete profile"
+                            className="text-red-500 hover:text-red-700 font-bold text-sm w-5 h-5 flex items-center justify-center hover:bg-red-50 rounded transition-all"
+                            title="Delete"
                           >
                             ✕
                           </button>
@@ -1209,248 +1204,58 @@
                   )}
                 </div>
 
-                {!projectionData.summary.isEMISufficient && (
-                  <div className="bg-red-500 rounded-2xl shadow-2xl p-6 md:p-8 mb-6 text-white">
-                  <div className="flex items-center gap-3 mb-2">
-                      <TrendingDown />
-                      <h2 className="text-2xl font-bold">⚠️ Warning: EMI Too Low!</h2>
-                  </div>
-                    <p className="mb-2">
-                      Your EMI (₹{loanData.emi.toLocaleString('en-IN')}) is not sufficient to cover the monthly interest.
-                    </p>
-                    <p className="font-bold">
-                      Minimum EMI required: ₹{projectionData.summary.minEMIRequired.toLocaleString('en-IN')}
-                    </p>
-                    <p className="text-sm mt-2 text-red-100">
-                      With the current EMI, your loan balance will not decrease. Please increase your EMI or add prepayments.
-                    </p>
-                </div>
-                )}
-
-                {projectionData.schedule.length > 0 && (
-                  <div className="bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl shadow-2xl p-6 mb-6 text-white">
-                    <div className="flex items-center gap-3 mb-4">
-                      <PieChart />
-                      <h2 className="text-xl font-bold">Loan Overview - Profile: {currentProfile}</h2>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-                      <div>
-                        <p className="text-xs opacity-80">Principal</p>
-                        <p className="text-lg font-bold">₹{(loanData.startingBalance / 100000).toFixed(2)}L</p>
-                      </div>
-                      <div>
-                        <p className="text-xs opacity-80">ROI Periods</p>
-                        <p className="text-lg font-bold">{roiPeriods.length} period{roiPeriods.length !== 1 ? 's' : ''}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs opacity-80">EMI Periods</p>
-                        <p className="text-lg font-bold">{emiPeriods.length} period{emiPeriods.length !== 1 ? 's' : ''}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs opacity-80">Prepayments</p>
-                        <p className="text-lg font-bold">{prepayments.length} scheduled</p>
-                      </div>
-                      <div>
-                        <p className="text-xs opacity-80">Start Date</p>
-                        <p className="text-lg font-bold">{loanData.startMonth} {loanData.startYear}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      {roiPeriods.length > 0 && (
-                        <div className="bg-white bg-opacity-10 backdrop-blur rounded-lg p-4">
-                          <p className="text-xs opacity-80 mb-2 font-semibold">Interest Rate (ROI) Periods:</p>
-                          <div className="space-y-1">
-                            {roiPeriods.map((roi, idx) => (
-                              <div key={idx} className="bg-white bg-opacity-20 px-3 py-1 rounded text-sm">
-                                <span className="font-bold">{roi.roi}%</span> from {roi.month} {roi.year}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {emiPeriods.length > 0 && (
-                        <div className="bg-white bg-opacity-10 backdrop-blur rounded-lg p-4">
-                          <p className="text-xs opacity-80 mb-2 font-semibold">EMI Periods:</p>
-                          <div className="space-y-1">
-                            {emiPeriods.map((emi, idx) => (
-                              <div key={idx} className="bg-white bg-opacity-20 px-3 py-1 rounded text-sm">
-                                <span className="font-bold">₹{emi.emi.toLocaleString('en-IN')}</span> from {emi.month} {emi.year}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {prepayments.length > 0 && (
-                      <div className="bg-white bg-opacity-10 backdrop-blur rounded-lg p-4">
-                        <p className="text-xs opacity-80 mb-2 font-semibold">Total Prepayments: ₹{(projectionData.summary.totalPrepaymentsMade / 100000).toFixed(2)}L</p>
-                        <p className="text-xs opacity-70">Scroll down to "Manage Prepayments" to see all scheduled prepayments</p>
-                      </div>
-                    )}
-                    
-                    <div className="bg-yellow-400 bg-opacity-20 border-2 border-yellow-300 rounded-lg p-4 mt-4">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="text-sm font-bold">📊 Calculated Result: {projectionData.schedule.length} months ({Math.floor(projectionData.schedule.length / 12)} years {projectionData.schedule.length % 12} months)</p>
-                          <p className="text-xs mt-1 opacity-90">If this doesn't match your expectation, click "View Details" to see all calculation inputs.</p>
-                        </div>
-                        <button
-                          onClick={() => setShowDebugModal(true)}
-                          className="bg-white bg-opacity-90 hover:bg-opacity-100 text-blue-700 px-4 py-2 rounded-lg font-semibold text-sm transition-colors"
-                        >
-                          🔍 View Details
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {motivationStats && projectionData.summary.isEMISufficient && (
-                  <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-2xl p-6 md:p-8 mb-6 text-white">
-                    <div className="flex items-center gap-3 mb-6">
-                      <Zap />
-                      <h2 className="text-2xl font-bold">Your Progress Motivation 🔥</h2>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                      <div className="bg-white bg-opacity-10 backdrop-blur rounded-xl p-6">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Target />
-                          <h3 className="text-lg font-bold">EMI Power Ratio</h3>
-                        </div>
-                        <div className="text-5xl font-bold mb-2">
-                          {motivationStats.currentRatio.toFixed(2)}x
-                        </div>
-                        <p className="text-sm text-green-100">
-                          For every ₹1 interest, your EMI pays ₹{motivationStats.currentRatio.toFixed(2)} principal
-                        </p>
-                      </div>
-
-                      <div className="bg-white bg-opacity-10 backdrop-blur rounded-xl p-6">
-                        <div className="flex items-center gap-2 mb-3">
-                          <TrendingUp />
-                          <h3 className="text-lg font-bold">EMI Principal beats Interest</h3>
-                        </div>
-                        {motivationStats.crossoverMonth ? (
-                          <>
-                            <div className="text-3xl font-bold mb-2">
-                              {motivationStats.crossoverMonth.month}
-                            </div>
-                            <p className="text-sm text-green-100">
-                              🎉 EMI principal overtakes interest!
-                            </p>
-                          </>
-                        ) : (
-                          <p className="text-sm text-green-100">
-                            Add prepayments to reach this faster!
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {motivationStats.milestones.map((milestone, idx) => (
-                        <div 
-                          key={idx}
-                          className={`p-4 rounded-lg border-2 transition-all ${
-                            milestone.achieved 
-                              ? 'bg-yellow-400 border-yellow-300 text-yellow-900' 
-                              : 'bg-white bg-opacity-10 border-white border-opacity-30 text-white'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            {milestone.achieved && <Award />}
-                            <span className="text-xs font-bold">{milestone.title}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 mb-6">
-                  <h2 className="text-2xl font-bold text-gray-800 mb-6">Loan Details</h2>
+                <div className="bg-white rounded-xl shadow-lg p-4 md:p-6 mb-6">
+                  <h2 className="text-xl font-bold text-gray-800 mb-4">📝 Loan Inputs</h2>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Starting Balance (₹)
-                      </label>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Left Column - Basic + ROI */}
+                    <div className="space-y-4">
+                      {/* Basic Info */}
+                      <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                        <h3 className="text-sm font-bold text-purple-700 mb-2">Loan Details</h3>
+                        <div className="grid grid-cols-3 gap-2">
                       <input
                         type="number"
-                        value={loanData.startingBalance}
+                            value={loanData.startingBalance || ''}
                         onChange={(e) => handleInputChange('startingBalance', e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
+                            className="col-span-3 px-3 py-2 border border-gray-300 rounded text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-200 outline-none"
+                            placeholder="Loan Amount (₹)"
                         min="0"
                       />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Loan Start Month
-                      </label>
                       <select
                         value={loanData.startMonth}
                         onChange={(e) => handleStartDateChange('startMonth', e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
+                            className="px-2 py-2 border border-gray-300 rounded text-sm focus:border-purple-500 outline-none"
                       >
                         {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
                           <option key={m} value={m}>{m}</option>
                         ))}
                       </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Loan Start Year
-                      </label>
                       <input
                         type="number"
                         value={loanData.startYear}
                         onChange={(e) => handleStartDateChange('startYear', parseInt(e.target.value))}
-                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
+                            className="col-span-2 px-3 py-2 border border-gray-300 rounded text-sm focus:border-purple-500 outline-none"
+                            placeholder="Year"
                         min="2000"
                         max="2100"
                       />
                     </div>
                     </div>
 
-                  <div className="mt-4 bg-purple-50 border-l-4 border-purple-500 p-4 rounded">
-                    <p className="text-sm text-gray-700">
-                      💡 <strong>Tip:</strong> Use the <strong>ROI Periods</strong> section below to set interest rates and <strong>EMI Periods</strong> section to set EMI amounts that apply from specific months.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 mb-6">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Interest Rate (ROI) Periods</h2>
+                      {/* ROI */}
+                      <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="text-sm font-bold text-blue-700">Interest Rate (ROI)</h3>
                     {roiPeriods.length > 1 && (
-                      <button
-                        onClick={clearAllRoiPeriods}
-                        className="text-blue-600 hover:text-blue-800 font-semibold text-sm"
-                      >
-                        Reset to Single ROI
-                      </button>
+                            <button onClick={clearAllRoiPeriods} className="text-xs text-blue-600 hover:text-blue-800">Clear</button>
                     )}
                   </div>
-
-                  <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 mb-6">
-                    <h3 className="font-bold text-gray-800 mb-2">Add ROI Change</h3>
-                    <p className="text-sm text-gray-600 mb-4">Add a new interest rate that applies from a specific month</p>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4"
-                         onKeyPress={(e) => {
-                           if (e.key === 'Enter') {
-                             addRoiPeriod();
-                           }
-                         }}>
+                        <div className="grid grid-cols-4 gap-2 mb-2">
                       <select
                         value={newRoiPeriod.month}
                         onChange={(e) => setNewRoiPeriod(prev => ({ ...prev, month: e.target.value }))}
-                        className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                            className="px-2 py-1.5 border border-gray-300 rounded text-xs outline-none"
                       >
                         {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
                           <option key={m} value={m}>{m}</option>
@@ -1459,83 +1264,54 @@
                       <input
                         type="number"
                         value={newRoiPeriod.year}
-                        onChange={(e) => setNewRoiPeriod(prev => ({ ...prev, year: parseInt(e.target.value) || 2026 }))}
-                        className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                            onChange={(e) => setNewRoiPeriod(prev => ({ ...prev, year: parseInt(e.target.value) || new Date().getFullYear() }))}
+                            className="px-2 py-1.5 border border-gray-300 rounded text-xs outline-none"
                         placeholder="Year"
-                        min="2000"
-                        max="2100"
                       />
                       <input
                         type="number"
                         step="0.1"
                         value={newRoiPeriod.roi}
-                        onChange={(e) => setNewRoiPeriod(prev => ({ ...prev, roi: parseFloat(e.target.value) || 0 }))}
-                        className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                            onChange={(e) => setNewRoiPeriod(prev => ({ ...prev, roi: e.target.value }))}
+                            className="px-2 py-1.5 border border-gray-300 rounded text-xs outline-none"
                         placeholder="ROI %"
-                        min="0"
-                        max="100"
+                            onKeyPress={(e) => e.key === 'Enter' && addRoiPeriod()}
                       />
                       <button
                         onClick={addRoiPeriod}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors shadow-md hover:shadow-lg"
+                            className="bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold"
                       >
-                        Add ROI
+                            +
                       </button>
                     </div>
-                  </div>
-
-                  {roiPeriods.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {roiPeriods.length > 0 && (
+                          <div className="space-y-1 max-h-24 overflow-y-auto">
                       {roiPeriods.map((roi, idx) => (
-                        <div key={idx} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 flex justify-between items-center hover:bg-blue-100 transition-colors">
-                          <div>
-                            <p className="font-bold text-gray-800">From {roi.month} {roi.year}</p>
-                            <p className="text-sm text-blue-600 font-semibold">{roi.roi}% p.a.</p>
-                          </div>
-                          <button
-                            onClick={() => removeRoiPeriod(idx)}
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50 w-8 h-8 rounded-full flex items-center justify-center font-bold transition-colors"
-                            title="Remove ROI period"
-                          >
-                            ✕
-                          </button>
+                              <div key={idx} className="bg-white rounded px-2 py-1 flex justify-between items-center text-xs">
+                                <span><strong>{roi.roi}%</strong> from {roi.month} {roi.year}</span>
+                                <button onClick={() => removeRoiPeriod(idx)} className="text-red-500 hover:text-red-700 font-bold">✕</button>
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <p className="text-lg">No ROI periods defined.</p>
-                      <p className="text-sm mt-2">Add at least one interest rate period above.</p>
-                    </div>
                   )}
+                      </div>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 mb-6">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800">EMI Change Periods</h2>
+                    {/* Right Column - EMI + Prepayments */}
+                    <div className="space-y-4">
+                      {/* EMI */}
+                      <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="text-sm font-bold text-orange-700">EMI Amounts</h3>
                     {emiPeriods.length > 1 && (
-                      <button
-                        onClick={clearAllEmiPeriods}
-                        className="text-orange-600 hover:text-orange-800 font-semibold text-sm"
-                      >
-                        Reset to Single EMI
-                      </button>
+                            <button onClick={clearAllEmiPeriods} className="text-xs text-orange-600 hover:text-orange-800">Clear</button>
                     )}
                   </div>
-
-                  <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-6 mb-6">
-                    <h3 className="font-bold text-gray-800 mb-2">Add EMI Change</h3>
-                    <p className="text-sm text-gray-600 mb-4">Add a new EMI amount that applies from a specific month</p>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4"
-                         onKeyPress={(e) => {
-                           if (e.key === 'Enter') {
-                             addEmiPeriod();
-                           }
-                         }}>
+                        <div className="grid grid-cols-4 gap-2 mb-2">
                       <select
                         value={newEmiPeriod.month}
                         onChange={(e) => setNewEmiPeriod(prev => ({ ...prev, month: e.target.value }))}
-                        className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none"
+                            className="px-2 py-1.5 border border-gray-300 rounded text-xs outline-none"
                       >
                         {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
                           <option key={m} value={m}>{m}</option>
@@ -1544,80 +1320,50 @@
                       <input
                         type="number"
                         value={newEmiPeriod.year}
-                        onChange={(e) => setNewEmiPeriod(prev => ({ ...prev, year: parseInt(e.target.value) || 2026 }))}
-                        className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none"
+                            onChange={(e) => setNewEmiPeriod(prev => ({ ...prev, year: parseInt(e.target.value) || new Date().getFullYear() }))}
+                            className="px-2 py-1.5 border border-gray-300 rounded text-xs outline-none"
                         placeholder="Year"
-                        min="2000"
-                        max="2100"
                       />
                       <input
                         type="number"
                         value={newEmiPeriod.emi}
-                        onChange={(e) => setNewEmiPeriod(prev => ({ ...prev, emi: parseFloat(e.target.value) || 0 }))}
-                        className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none"
-                        placeholder="EMI (₹)"
-                        min="0"
+                            onChange={(e) => setNewEmiPeriod(prev => ({ ...prev, emi: e.target.value }))}
+                            className="px-2 py-1.5 border border-gray-300 rounded text-xs outline-none"
+                            placeholder="EMI ₹"
+                            onKeyPress={(e) => e.key === 'Enter' && addEmiPeriod()}
                       />
                       <button
                         onClick={addEmiPeriod}
-                        className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors shadow-md hover:shadow-lg"
+                            className="bg-orange-600 hover:bg-orange-700 text-white rounded text-xs font-semibold"
                       >
-                        Add EMI
+                            +
                       </button>
                     </div>
-                  </div>
-
-                  {emiPeriods.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {emiPeriods.length > 0 && (
+                          <div className="space-y-1 max-h-24 overflow-y-auto">
                       {emiPeriods.map((emi, idx) => (
-                        <div key={idx} className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4 flex justify-between items-center hover:bg-orange-100 transition-colors">
-                          <div>
-                            <p className="font-bold text-gray-800">From {emi.month} {emi.year}</p>
-                            <p className="text-sm text-orange-600 font-semibold">₹{emi.emi.toLocaleString('en-IN')}</p>
-                          </div>
-                          <button
-                            onClick={() => removeEmiPeriod(idx)}
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50 w-8 h-8 rounded-full flex items-center justify-center font-bold transition-colors"
-                            title="Remove EMI period"
-                          >
-                            ✕
-                          </button>
+                              <div key={idx} className="bg-white rounded px-2 py-1 flex justify-between items-center text-xs">
+                                <span><strong>₹{emi.emi.toLocaleString('en-IN')}</strong> from {emi.month} {emi.year}</span>
+                                <button onClick={() => removeEmiPeriod(idx)} className="text-red-500 hover:text-red-700 font-bold">✕</button>
                         </div>
                       ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <p className="text-lg">No EMI periods defined.</p>
-                      <p className="text-sm mt-2">Add at least one EMI period above.</p>
                     </div>
                   )}
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 mb-6">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Manage Prepayments</h2>
+                      {/* Prepayments */}
+                      <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="text-sm font-bold text-green-700">Prepayments</h3>
                     {prepayments.length > 0 && (
-                      <button
-                        onClick={clearAllPrepayments}
-                        className="text-red-600 hover:text-red-800 font-semibold text-sm"
-                      >
-                        Clear All
-                      </button>
+                            <button onClick={clearAllPrepayments} className="text-xs text-red-600 hover:text-red-800">Clear</button>
                     )}
                   </div>
-
-                  <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 mb-6">
-                    <h3 className="font-bold text-gray-800 mb-4">Add New Prepayment</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4"
-                         onKeyPress={(e) => {
-                           if (e.key === 'Enter') {
-                             addPrepayment();
-                           }
-                         }}>
+                        <div className="grid grid-cols-4 gap-2 mb-2">
                       <select
                         value={newPrepayment.month}
                         onChange={(e) => setNewPrepayment(prev => ({ ...prev, month: e.target.value }))}
-                        className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none"
+                            className="px-2 py-1.5 border border-gray-300 rounded text-xs outline-none"
                       >
                         {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
                           <option key={m} value={m}>{m}</option>
@@ -1626,71 +1372,164 @@
                       <input
                         type="number"
                         value={newPrepayment.year}
-                        onChange={(e) => setNewPrepayment(prev => ({ ...prev, year: parseInt(e.target.value) || 2026 }))}
-                        className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none"
+                            onChange={(e) => setNewPrepayment(prev => ({ ...prev, year: parseInt(e.target.value) || new Date().getFullYear() }))}
+                            className="px-2 py-1.5 border border-gray-300 rounded text-xs outline-none"
                         placeholder="Year"
-                        min="2000"
-                        max="2100"
                       />
                       <input
                         type="number"
                         value={newPrepayment.amount}
-                        onChange={(e) => setNewPrepayment(prev => ({ ...prev, amount: parseInt(e.target.value) || 0 }))}
-                        className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none"
-                        placeholder="Amount (₹)"
-                        min="0"
+                            onChange={(e) => setNewPrepayment(prev => ({ ...prev, amount: e.target.value }))}
+                            className="px-2 py-1.5 border border-gray-300 rounded text-xs outline-none"
+                            placeholder="Amount"
+                            onKeyPress={(e) => e.key === 'Enter' && addPrepayment()}
                       />
                       <button
                         onClick={addPrepayment}
-                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors shadow-md hover:shadow-lg"
+                            className="bg-green-600 hover:bg-green-700 text-white rounded text-xs font-semibold"
                       >
-                        Add
+                            +
                       </button>
+                        </div>
+                        {prepayments.length > 0 && (
+                          <div className="space-y-1 max-h-24 overflow-y-auto">
+                            {prepayments.map((prep, idx) => (
+                              <div key={idx} className="bg-white rounded px-2 py-1 flex justify-between items-center text-xs">
+                                <span><strong>₹{prep.amount.toLocaleString('en-IN')}</strong> on {prep.month} {prep.year}</span>
+                                <button onClick={() => removePrepayment(idx)} className="text-red-500 hover:text-red-700 font-bold">✕</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                     </div>
                   </div>
 
-                  {prepayments.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {prepayments.map((prep, idx) => (
-                        <div key={idx} className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4 flex justify-between items-center hover:bg-purple-100 transition-colors">
-                        <div>
-                            <p className="font-bold text-gray-800">{prep.month} {prep.year}</p>
-                            <p className="text-sm text-purple-600 font-semibold">₹{prep.amount.toLocaleString('en-IN')}</p>
+                {!projectionData.summary.isEMISufficient && (
+                  <div className="bg-red-500 rounded-xl shadow-lg p-5 mb-6 text-white border-2 border-red-400">
+                    <div className="flex items-center gap-2 mb-3">
+                      <TrendingDown />
+                      <h3 className="text-lg font-bold">⚠️ EMI Too Low</h3>
+                    </div>
+                    <p className="text-sm mb-2">Your EMI won't cover monthly interest. Loan balance will not decrease.</p>
+                    <div className="bg-white bg-opacity-20 rounded-lg p-3 text-sm">
+                      <p><strong>Minimum EMI:</strong> ₹{projectionData.summary.minEMIRequired.toLocaleString('en-IN')}</p>
+                      <p className="text-xs opacity-90 mt-1">Increase EMI or add prepayments</p>
+                    </div>
+                  </div>
+                )}
+
+                {projectionData.schedule.length > 0 && (
+                  <div className="bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl shadow-lg p-5 mb-6 text-white">
+                    <div className="flex justify-between items-center mb-4">
+                      <div className="flex items-center gap-2">
+                        <PieChart />
+                        <h3 className="text-lg font-bold">📊 Loan Overview ({currentProfile})</h3>
                         </div>
                         <button
-                          onClick={() => removePrepayment(idx)}
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50 w-8 h-8 rounded-full flex items-center justify-center font-bold transition-colors"
-                            title="Remove prepayment"
+                        onClick={() => setShowDebugModal(true)}
+                        className="bg-white text-blue-600 px-3 py-1.5 rounded-lg font-semibold text-xs hover:bg-opacity-90 transition-colors"
                         >
-                          ✕
+                        🔍 Details
                         </button>
                       </div>
-                    ))}
+                    
+                    <div className="grid grid-cols-3 md:grid-cols-6 gap-3 text-center">
+                      <div className="bg-white bg-opacity-15 rounded-lg p-2">
+                        <p className="text-xs opacity-75">Principal</p>
+                        <p className="font-bold text-sm">₹{(loanData.startingBalance / 100000).toFixed(1)}L</p>
                   </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <p className="text-lg">No prepayments added yet.</p>
-                      <p className="text-sm mt-2">Add prepayments above to see how they reduce your loan tenure and interest.</p>
+                      <div className="bg-white bg-opacity-15 rounded-lg p-2">
+                        <p className="text-xs opacity-75">ROI</p>
+                        <p className="font-bold text-sm">{roiPeriods.length}</p>
+                      </div>
+                      <div className="bg-white bg-opacity-15 rounded-lg p-2">
+                        <p className="text-xs opacity-75">EMI</p>
+                        <p className="font-bold text-sm">{emiPeriods.length}</p>
+                      </div>
+                      <div className="bg-white bg-opacity-15 rounded-lg p-2">
+                        <p className="text-xs opacity-75">Prepay</p>
+                        <p className="font-bold text-sm">{prepayments.length}</p>
+                      </div>
+                      <div className="bg-white bg-opacity-15 rounded-lg p-2">
+                        <p className="text-xs opacity-75">Duration</p>
+                        <p className="font-bold text-sm">{Math.floor(projectionData.schedule.length / 12)}y {projectionData.schedule.length % 12}m</p>
+                      </div>
+                      <div className="bg-white bg-opacity-15 rounded-lg p-2">
+                        <p className="text-xs opacity-75">Saved</p>
+                        <p className="font-bold text-sm">{projectionData.summary.monthsSaved}m</p>
+                      </div>
+                    </div>
                     </div>
                   )}
+
+                {motivationStats && projectionData.summary.isEMISufficient && (
+                  <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg p-5 mb-6 text-white">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Zap />
+                      <h3 className="text-lg font-bold">🔥 Progress Tracker</h3>
                 </div>
 
-                {projectionData.schedule.length > 0 && roiPeriods.length > 1 && (
-                  <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-2xl p-6 mb-6 text-white">
-                    <div className="flex items-center gap-3 mb-4">
-                      <Calendar />
-                      <h2 className="text-xl font-bold">ROI Period Breakdown</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div className="bg-white bg-opacity-15 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Target />
+                          <span className="text-sm font-semibold">EMI Power Ratio</span>
+                        </div>
+                        <div className="text-4xl font-bold">{motivationStats.currentRatio.toFixed(2)}x</div>
+                        <p className="text-xs opacity-90 mt-1">₹1 interest = ₹{motivationStats.currentRatio.toFixed(2)} principal</p>
+                      </div>
+
+                      <div className="bg-white bg-opacity-15 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <TrendingUp />
+                          <span className="text-sm font-semibold">Crossover Point</span>
+                        </div>
+                        {motivationStats.crossoverMonth ? (
+                          <>
+                            <div className="text-2xl font-bold">{motivationStats.crossoverMonth.month}</div>
+                            <p className="text-xs opacity-90 mt-1">🎉 Principal beats interest!</p>
+                          </>
+                        ) : (
+                          <p className="text-sm opacity-90">Add prepayments to reach faster</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {motivationStats.milestones.map((milestone, idx) => (
+                        <div 
+                          key={idx}
+                          className={`p-2 rounded text-center text-xs font-semibold ${
+                            milestone.achieved 
+                              ? 'bg-yellow-400 text-yellow-900' 
+                              : 'bg-white bg-opacity-10'
+                          }`}
+                        >
+                          {milestone.achieved && '✓ '}{milestone.title.replace('EMI Principal = ', '')}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {projectionData.schedule.length > 0 && roiPeriods.length > 1 && (
+                  <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg p-4 mb-6 text-white">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Calendar />
+                      <h3 className="text-base font-bold">ROI Breakdown</h3>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                       {(() => {
                         const roiMonthCount = {};
                         projectionData.schedule.forEach(row => {
                           roiMonthCount[row.roi] = (roiMonthCount[row.roi] || 0) + 1;
                         });
                         return Object.entries(roiMonthCount).map(([roi, months]) => (
-                          <div key={roi} className="bg-white bg-opacity-10 backdrop-blur rounded-lg p-4">
-                            <p className="text-3xl font-bold">{roi}%</p>
-                            <p className="text-sm opacity-90">{months} months</p>
+                          <div key={roi} className="bg-white bg-opacity-15 rounded-lg p-3 text-center">
+                            <p className="text-2xl font-bold">{roi}%</p>
+                            <p className="text-xs opacity-80">{months} months</p>
                           </div>
                         ));
                       })()}
@@ -1698,53 +1537,246 @@
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Calendar />
-                      <p className="text-sm font-semibold">Last EMI Month</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                  <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg p-4 text-white shadow">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Calendar className="w-4 h-4" />
+                      <p className="text-xs font-semibold">Last EMI</p>
                     </div>
-                    <p className="text-2xl font-bold">{projectionData.summary.lastEMIMonth}</p>
-                    <p className="text-xs mt-1 opacity-90">{projectionData.summary.totalMonths} months total</p>
+                    <p className="text-xl font-bold">{projectionData.summary.lastEMIMonth}</p>
+                    <p className="text-xs opacity-80 mt-0.5">{projectionData.summary.totalMonths} months</p>
                   </div>
-                  <div className="bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl p-6 text-white shadow-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                      <TrendingUp />
-                      <p className="text-sm font-semibold">Months Saved</p>
+                  <div className="bg-gradient-to-br from-yellow-500 to-orange-600 rounded-lg p-4 text-white shadow">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <TrendingUp className="w-4 h-4" />
+                      <p className="text-xs font-semibold">Saved</p>
                     </div>
-                    <p className="text-2xl font-bold">{projectionData.summary.monthsSaved}</p>
-                    <p className="text-xs mt-1 opacity-90">
-                      vs {projectionData.summary.withoutPrepaymentMonths} months without prepayment
-                    </p>
+                    <p className="text-xl font-bold">{projectionData.summary.monthsSaved}m</p>
+                    <p className="text-xs opacity-80 mt-0.5">vs {projectionData.summary.withoutPrepaymentMonths}m</p>
                   </div>
-                  <div className="bg-gradient-to-br from-red-500 to-pink-600 rounded-xl p-6 text-white shadow-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                      <DollarSign />
-                      <p className="text-sm font-semibold">Interest Saved</p>
+                  <div className="bg-gradient-to-br from-red-500 to-pink-600 rounded-lg p-4 text-white shadow">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <DollarSign className="w-4 h-4" />
+                      <p className="text-xs font-semibold">Interest Saved</p>
                     </div>
-                    <p className="text-2xl font-bold">₹{(projectionData.summary.interestSaved / 100000).toFixed(2)}L</p>
-                    <p className="text-xs mt-1 opacity-90">
-                      Total interest: ₹{(projectionData.summary.totalInterestPaid / 100000).toFixed(2)}L
-                    </p>
+                    <p className="text-xl font-bold">₹{(projectionData.summary.interestSaved / 100000).toFixed(1)}L</p>
+                    <p className="text-xs opacity-80 mt-0.5">of ₹{(projectionData.summary.totalInterestPaid / 100000).toFixed(1)}L</p>
                   </div>
-                  <div className="bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl p-6 text-white shadow-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                      <PieChart />
-                      <p className="text-sm font-semibold">Total Prepayments</p>
+                  <div className="bg-gradient-to-br from-purple-500 to-violet-600 rounded-lg p-4 text-white shadow">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <PieChart className="w-4 h-4" />
+                      <p className="text-xs font-semibold">Prepayments</p>
                     </div>
-                    <p className="text-2xl font-bold">₹{(projectionData.summary.totalPrepaymentsMade / 100000).toFixed(2)}L</p>
-                    <p className="text-xs mt-1 opacity-90">
-                      {prepayments.length} prepayment{prepayments.length !== 1 ? 's' : ''}
-                    </p>
+                    <p className="text-xl font-bold">₹{(projectionData.summary.totalPrepaymentsMade / 100000).toFixed(1)}L</p>
+                    <p className="text-xs opacity-80 mt-0.5">{prepayments.length} payment{prepayments.length !== 1 ? 's' : ''}</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                {/* Payment Schedule Section - Moved Up */}
+                <div className="flex justify-end mb-4">
+                  <button
+                    onClick={exportToCSV}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-semibold text-sm shadow-md hover:shadow-lg transition-all"
+                  >
+                    <Download />
+                    Export CSV
+                  </button>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-2xl overflow-hidden mb-6">
+                  {(() => {
+                    const now = new Date();
+                    const currentMonth = now.toLocaleString('en-US', { month: 'short' });
+                    const currentYear = now.getFullYear();
+                    const currentIndex = projectionData.schedule.findIndex(row => {
+                      const [month, year] = row.month.split(' ');
+                      return month === currentMonth && parseInt(year) === currentYear;
+                    });
+                    
+                    let statusBadge = '';
+                    if (currentIndex === -1) {
+                      const loanStartDate = new Date(loanData.startYear, ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(loanData.startMonth), 1);
+                      if (now < loanStartDate) {
+                        statusBadge = `📌 Starts ${loanData.startMonth} ${loanData.startYear}`;
+                      } else {
+                        statusBadge = '✅ Completed';
+                      }
+                    } else {
+                      statusBadge = `📍 Current: ${currentMonth} ${currentYear}`;
+                    }
+                    
+                    return (
+                      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6">
+                        <div className="flex justify-between items-center flex-wrap gap-3">
+                    <div>
+                            <h2 className="text-2xl font-bold text-white">📅 Payment Schedule</h2>
+                      <p className="text-sm text-indigo-100 mt-1">
+                              {Math.floor(projectionData.schedule.length / 12)}y {projectionData.schedule.length % 12}m • 
+                              Final: {projectionData.summary.lastEMIMonth} • {statusBadge}
+                      </p>
+                    </div>
+                    {projectionData.schedule.length > 13 && (
+                      <button
+                        onClick={() => setShowAllRows(!showAllRows)}
+                              className="bg-white text-indigo-600 px-4 py-2 rounded-lg font-semibold hover:bg-indigo-50 text-sm"
+                      >
+                              {showAllRows ? `📍 Current Month` : `📋 All ${projectionData.schedule.length}`}
+                      </button>
+                    )}
+                  </div>
+                      </div>
+                    );
+                  })()}
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="px-4 py-3 text-left">Month</th>
+                          <th className="px-4 py-3 text-right">ROI %</th>
+                          <th className="px-4 py-3 text-right">EMI</th>
+                          <th className="px-4 py-3 text-right">Opening</th>
+                          <th className="px-4 py-3 text-right">Interest</th>
+                          <th className="px-4 py-3 text-right">EMI Principal</th>
+                          <th className="px-4 py-3 text-right">Prepayment</th>
+                          <th className="px-4 py-3 text-right">Closing</th>
+                          <th className="px-4 py-3 text-right" title="EMI Principal ÷ Interest">
+                            P/I Ratio
+                          </th>
+                          <th className="px-4 py-3 text-right bg-yellow-100" title="Months saved by prepayment">
+                            <span className="font-bold text-yellow-800">💰 Months Saved</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          // Find current month index
+                          const now = new Date();
+                          const currentMonth = now.toLocaleString('en-US', { month: 'short' });
+                          const currentYear = now.getFullYear();
+                          
+                          const currentIndex = projectionData.schedule.findIndex(row => {
+                            const [month, year] = row.month.split(' ');
+                            return month === currentMonth && parseInt(year) === currentYear;
+                          });
+                          
+                          // Determine which rows to show
+                          let displayRows;
+                          if (showAllRows) {
+                            displayRows = projectionData.schedule;
+                          } else if (currentIndex !== -1) {
+                            // Current month found - show 6 before and 6 after (13 total including current)
+                            const start = Math.max(0, currentIndex - 6);
+                            const end = Math.min(projectionData.schedule.length, currentIndex + 7);
+                            displayRows = projectionData.schedule.slice(start, end);
+                          } else {
+                            // Current month not found - show first 12 months
+                            displayRows = projectionData.schedule.slice(0, rowsToShow);
+                          }
+                          
+                          return displayRows.map((row, index) => {
+                            const actualIndex = showAllRows 
+                              ? index 
+                              : currentIndex !== -1 
+                                ? Math.max(0, currentIndex - 6) + index 
+                                : index;
+                            const prevRow = actualIndex > 0 ? projectionData.schedule[actualIndex - 1] : null;
+                          const roiChanged = prevRow && prevRow.roi !== row.roi;
+                          const emiChanged = prevRow && prevRow.emi !== row.emi;
+                            
+                            // Check if this is the current month
+                            const [rowMonth, rowYear] = row.month.split(' ');
+                            const isCurrentMonth = rowMonth === currentMonth && parseInt(rowYear) === currentYear;
+                          
+                          return (
+                            <tr key={index} className={
+                              isCurrentMonth 
+                                ? 'bg-yellow-200 border-y-2 border-yellow-400' 
+                                : row.prepayment > 0 
+                                  ? 'bg-purple-50' 
+                                  : index % 2 === 0 
+                                    ? 'bg-gray-50' 
+                                    : ''
+                            }>
+                            <td className="px-4 py-3 font-semibold">
+                              <div className="flex items-center gap-2">
+                                {isCurrentMonth && <span className="text-yellow-600 font-bold">▶</span>}
+                                {row.month}
+                              </div>
+                              {isCurrentMonth && <span className="text-xs text-yellow-700 font-bold block mt-0.5">(Current)</span>}
+                            </td>
+                              <td className="px-4 py-3 text-right">
+                                <span className={roiChanged ? 'bg-yellow-200 px-2 py-1 rounded font-bold text-yellow-900' : ''}>
+                                  {row.roi}%
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <span className={emiChanged ? 'bg-green-200 px-2 py-1 rounded font-bold text-green-900' : ''}>
+                                  ₹{row.emi.toLocaleString('en-IN')}
+                                </span>
+                              </td>
+                            <td className="px-4 py-3 text-right">₹{(row.openingBalance / 100000).toFixed(2)}L</td>
+                            <td className="px-4 py-3 text-right text-red-600">₹{row.interest.toLocaleString('en-IN')}</td>
+                            <td className="px-4 py-3 text-right text-green-600">₹{row.emiPrincipal.toLocaleString('en-IN')}</td>
+                            <td className="px-4 py-3 text-right text-purple-600 font-bold">
+                              {row.prepayment > 0 ? `₹${row.prepayment.toLocaleString('en-IN')}` : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold">₹{(row.closingBalance / 100000).toFixed(2)}L</td>
+                            <td className="px-4 py-3 text-right">
+                              <span className={row.principalVsInterestRatio >= 1 ? 'text-green-600 font-bold' : 'text-orange-600'}>
+                                {row.principalVsInterestRatio.toFixed(2)}x
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right bg-yellow-50">
+                                {row.monthsReduced > 0 ? (
+                              <span className="bg-yellow-400 text-yellow-900 px-2 py-1 rounded font-bold text-sm">
+                                -{row.monthsReduced}m
+                              </span>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                            </td>
+                          </tr>
+                          );
+                        });
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {!showAllRows && projectionData.schedule.length > 13 && (() => {
+                    const now = new Date();
+                    const currentMonth = now.toLocaleString('en-US', { month: 'short' });
+                    const currentYear = now.getFullYear();
+                    const currentIndex = projectionData.schedule.findIndex(row => {
+                      const [month, year] = row.month.split(' ');
+                      return month === currentMonth && parseInt(year) === currentYear;
+                    });
+                    
+                    let displayCount;
+                    if (currentIndex !== -1) {
+                      const start = Math.max(0, currentIndex - 6);
+                      const end = Math.min(projectionData.schedule.length, currentIndex + 7);
+                      displayCount = end - start;
+                    } else {
+                      displayCount = Math.min(rowsToShow, projectionData.schedule.length);
+                    }
+                    
+                    return (
+                      <div className="bg-gray-50 p-4 text-center text-gray-600 text-sm">
+                        Showing {displayCount} months around current month of {projectionData.schedule.length} total. Click "All {projectionData.schedule.length}" to see complete schedule.
+                    </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Key Dates and Tips Sections - Moved Down */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
                   {/* Key Changes Box */}
-                  <div className="bg-white rounded-2xl shadow-2xl p-6">
-                    <div className="flex items-center gap-2 mb-4">
+                  <div className="bg-white rounded-xl shadow-lg p-5">
+                    <div className="flex items-center gap-2 mb-3">
                       <Calendar />
-                      <h3 className="text-xl font-bold text-gray-800">📋 Key Changes & Important Dates</h3>
+                      <h3 className="text-lg font-bold text-gray-800">📋 Key Dates</h3>
                     </div>
                     
                     <div className="space-y-4">
@@ -1807,10 +1839,10 @@
                   </div>
 
                   {/* Tips & Info Box */}
-                  <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl shadow-2xl p-6">
-                    <div className="flex items-center gap-2 mb-4">
+                  <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl shadow-lg p-5">
+                    <div className="flex items-center gap-2 mb-3">
                       <Award />
-                      <h3 className="text-xl font-bold text-gray-800">💡 Smart Tips & Insights</h3>
+                      <h3 className="text-lg font-bold text-gray-800">💡 Smart Tips</h3>
                     </div>
                     
                     <div className="space-y-3">
@@ -1847,8 +1879,8 @@
                   </div>
                 </div>
 
-                {/* Current Month View - Past 5 & Future 5 */}
-                {projectionData.schedule.length >= 10 && (() => {
+                {/* Combined schedule section moved above - old quick view removed */}
+                {false && projectionData.schedule.length >= 10 && (() => {
                   // Get current date
                   const now = new Date();
                   const currentMonth = now.toLocaleString('en-US', { month: 'short' });
@@ -2028,109 +2060,6 @@
                   );
                 })()}
 
-                <div className="flex justify-end mb-4">
-                  <button
-                    onClick={exportToCSV}
-                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-semibold"
-                  >
-                    <Download />
-                    Export CSV
-                  </button>
-                </div>
-
-                <div className="bg-white rounded-2xl shadow-2xl overflow-hidden mb-6">
-                  <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 flex justify-between items-center">
-                    <div>
-                      <h2 className="text-2xl font-bold text-white">Complete Payment Schedule</h2>
-                      <p className="text-sm text-indigo-100 mt-1">
-                        {Math.floor(projectionData.schedule.length / 12)} years {projectionData.schedule.length % 12} months • 
-                        Final Payment: {projectionData.summary.lastEMIMonth}
-                      </p>
-                    </div>
-                    {projectionData.schedule.length > rowsToShow && (
-                      <button
-                        onClick={() => setShowAllRows(!showAllRows)}
-                        className="bg-white text-indigo-600 px-4 py-2 rounded-lg font-semibold hover:bg-indigo-50"
-                      >
-                        {showAllRows ? `Show First ${rowsToShow} Months` : `Show All ${projectionData.schedule.length} Months`}
-                      </button>
-                    )}
-                  </div>
-                  
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="px-4 py-3 text-left">Month</th>
-                          <th className="px-4 py-3 text-right">ROI %</th>
-                          <th className="px-4 py-3 text-right">EMI</th>
-                          <th className="px-4 py-3 text-right">Opening</th>
-                          <th className="px-4 py-3 text-right">Interest</th>
-                          <th className="px-4 py-3 text-right">EMI Principal</th>
-                          <th className="px-4 py-3 text-right">Prepayment</th>
-                          <th className="px-4 py-3 text-right">Closing</th>
-                          <th className="px-4 py-3 text-right" title="EMI Principal ÷ Interest (excludes prepayments)">
-                            EMI Principal/Interest
-                          </th>
-                          <th className="px-4 py-3 text-right" title="Months saved by prepayment in this month">
-                            Months Saved
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(showAllRows ? projectionData.schedule : projectionData.schedule.slice(0, rowsToShow)).map((row, index) => {
-                          const prevRow = index > 0 ? projectionData.schedule[index - 1] : null;
-                          const roiChanged = prevRow && prevRow.roi !== row.roi;
-                          const emiChanged = prevRow && prevRow.emi !== row.emi;
-                          
-                          return (
-                            <tr key={index} className={row.prepayment > 0 ? 'bg-purple-50' : index % 2 === 0 ? 'bg-gray-50' : ''}>
-                            <td className="px-4 py-3 font-semibold">{row.month}</td>
-                              <td className="px-4 py-3 text-right">
-                                <span className={roiChanged ? 'bg-yellow-200 px-2 py-1 rounded font-bold text-yellow-900' : ''}>
-                                  {row.roi}%
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <span className={emiChanged ? 'bg-green-200 px-2 py-1 rounded font-bold text-green-900' : ''}>
-                                  ₹{row.emi.toLocaleString('en-IN')}
-                                </span>
-                              </td>
-                            <td className="px-4 py-3 text-right">₹{(row.openingBalance / 100000).toFixed(2)}L</td>
-                            <td className="px-4 py-3 text-right text-red-600">₹{row.interest.toLocaleString('en-IN')}</td>
-                            <td className="px-4 py-3 text-right text-green-600">₹{row.emiPrincipal.toLocaleString('en-IN')}</td>
-                            <td className="px-4 py-3 text-right text-purple-600 font-bold">
-                              {row.prepayment > 0 ? `₹${row.prepayment.toLocaleString('en-IN')}` : '-'}
-                            </td>
-                            <td className="px-4 py-3 text-right font-semibold">₹{(row.closingBalance / 100000).toFixed(2)}L</td>
-                            <td className="px-4 py-3 text-right">
-                              <span className={row.principalVsInterestRatio >= 1 ? 'text-green-600 font-bold' : 'text-orange-600'}>
-                                {row.principalVsInterestRatio.toFixed(2)}x
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                                {row.monthsReduced > 0 ? (
-                              <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded font-bold">
-                                {row.monthsReduced}
-                              </span>
-                                ) : (
-                                  <span className="text-gray-400">-</span>
-                                )}
-                            </td>
-                          </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  {!showAllRows && projectionData.schedule.length > rowsToShow && (
-                    <div className="bg-gray-50 p-4 text-center text-gray-600">
-                      Showing {rowsToShow} of {projectionData.schedule.length} months. Click "Show All Months" to see the complete projection.
-                    </div>
-                  )}
-                </div>
-
                 {/* Floating Action Buttons */}
                 <div className="fixed right-6 bottom-24 z-40 flex flex-col gap-3">
                   <a
@@ -2154,86 +2083,40 @@
                   </button>
                 </div>
 
-                {/* Support Section */}
-                <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-2xl shadow-2xl p-8 mb-6 text-white">
-                  <div className="max-w-4xl mx-auto">
-                    <div className="text-center mb-8">
-                      <div className="flex justify-center mb-4">
-                        <div className="bg-white bg-opacity-20 backdrop-blur rounded-xl p-3 inline-block">
-                          <LoanWiseLogo size="64" />
-                        </div>
-                      </div>
-                      <h3 className="text-3xl md:text-4xl font-bold mb-3">📚 Enjoying LoanWise?</h3>
-                      <p className="text-lg md:text-xl mb-2 opacity-90">
-                        This tool is <strong>100% FREE</strong> with no ads or hidden fees.
-                      </p>
-                      <p className="text-base opacity-80">
-                        If you've saved money or found value, consider supporting its development!
-                      </p>
+                {/* Support Section - Compact */}
+                <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-xl shadow-lg p-5 mb-6 text-white">
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="text-center md:text-left">
+                      <h3 className="text-lg font-bold mb-1">💜 Enjoying LoanWise?</h3>
+                      <p className="text-sm opacity-90">100% FREE • No Ads • Support if you found value!</p>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                      <div className="bg-white bg-opacity-10 backdrop-blur rounded-xl p-6 hover:bg-opacity-20 transition-all border border-white border-opacity-20">
-                        <div className="text-5xl mb-3">☕</div>
-                        <h4 className="font-bold text-lg mb-2">Buy Me a Coffee</h4>
-                        <p className="text-sm opacity-80">One-time support to keep this tool free and ad-free</p>
-                      </div>
-                      
-                      <div className="bg-white bg-opacity-10 backdrop-blur rounded-xl p-6 hover:bg-opacity-20 transition-all border border-white border-opacity-20">
-                        <div className="text-5xl mb-3">⭐</div>
-                        <h4 className="font-bold text-lg mb-2">Share with Others</h4>
-                        <p className="text-sm opacity-80">Help friends and family save thousands on their loans</p>
-                      </div>
-                      
-                      <div className="bg-white bg-opacity-10 backdrop-blur rounded-xl p-6 hover:bg-opacity-20 transition-all border border-white border-opacity-20">
-                        <div className="text-5xl mb-3">💬</div>
-                        <h4 className="font-bold text-lg mb-2">Send Feedback</h4>
-                        <p className="text-sm opacity-80">Your ideas help make this tool even better</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-wrap justify-center gap-4">
+                    <div className="flex flex-wrap justify-center gap-2">
                       <a
                         href="https://buymeacoffee.com/snickers9"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="bg-yellow-500 hover:bg-yellow-400 text-gray-900 px-8 py-4 rounded-xl font-bold transition-all shadow-xl hover:shadow-2xl hover:scale-105 flex items-center gap-2"
+                        className="bg-yellow-500 hover:bg-yellow-400 text-gray-900 px-4 py-2 rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg flex items-center gap-1.5"
                       >
-                        <span className="text-xl">☕</span>
-                        <span>Buy Me a Coffee</span>
+                        <span>☕</span>
+                        <span>Support</span>
                       </a>
                       
                       <button
                         onClick={() => setShowShareModal(true)}
-                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-4 rounded-xl font-bold transition-all shadow-xl hover:shadow-2xl hover:scale-105 flex items-center gap-2"
+                        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg flex items-center gap-1.5"
                       >
-                        <span className="text-xl">📤</span>
+                        <span>📤</span>
                         <span>Share</span>
                       </button>
                       
                       <a
-                        href="mailto:didyouknowmyemail@gmail.com?subject=LoanWise - Feedback&body=Hi! I have feedback about LoanWise:%0D%0A%0D%0A"
-                        className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur text-white px-8 py-4 rounded-xl font-bold transition-all shadow-xl hover:shadow-2xl hover:scale-105 border-2 border-white border-opacity-30 flex items-center gap-2"
+                        href="mailto:didyouknowmyemail@gmail.com?subject=LoanWise - Feedback"
+                        className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg flex items-center gap-1.5"
                       >
-                        <span className="text-xl">✉️</span>
+                        <span>✉️</span>
                         <span>Feedback</span>
                       </a>
-                    </div>
-                    
-                    <div className="mt-8 pt-6 border-t border-white border-opacity-20">
-                      <div className="text-sm opacity-90 space-y-2">
-                        <p className="flex items-center justify-center gap-2">
-                          <span>🔒</span>
-                          <span>Your data never leaves your browser</span>
-                        </p>
-                        <p className="flex items-center justify-center gap-2">
-                          <span>💎</span>
-                          <span>100% Free • No Ads • No Tracking</span>
-                        </p>
-                        <p className="mt-3 text-xs opacity-70">
-                          Made with 💜 by LoanWise for the community
-                        </p>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -2268,4 +2151,5 @@
         ReactDOM.render(<SmartLoanProjectionCalculator />, document.getElementById('root'));
     </script>
 </body>
+</html>
 </html>
