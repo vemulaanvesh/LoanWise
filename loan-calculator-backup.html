@@ -1522,9 +1522,9 @@
                       <div className="bg-green-50 rounded-lg p-3 border border-green-200">
                         <h3 className="text-sm font-bold text-green-700 mb-2">📅 Important Dates</h3>
                         <div className="space-y-3">
-                          {/* Loan Start Period - different from disbursement dates */}
+                          {/* Loan Start Period */}
                           <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">📊 Loan Start Period (for ROI/EMI periods)</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">📊 Loan Start Period</label>
                             <div className="grid grid-cols-3 gap-2">
                               <select
                                 value={loanData.startMonth}
@@ -1547,9 +1547,9 @@
                             </div>
                           </div>
 
-                          {/* EMI Start Date - separate from disbursement dates */}
+                          {/* EMI Start Date */}
                           <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">💳 EMI Start Date (when payments begin)</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">💳 EMI Start Date</label>
                             <input
                               type="date"
                               value={loanData.emiStartDate || ''}
