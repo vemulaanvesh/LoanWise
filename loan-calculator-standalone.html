@@ -142,6 +142,17 @@
             }
           };
 
+          const normalizeLoanData = (ld) => ({
+            startingBalance: ld?.startingBalance ?? 0,
+            startMonth: ld?.startMonth ?? 'Jan',
+            startYear: ld?.startYear ?? new Date().getFullYear(),
+            // Bank calculators often depend on these two dates
+            disbursements: ld?.disbursements ?? [], // Array of {date: 'YYYY-MM-DD', amount: number}
+            emiStartDate: ld?.emiStartDate ?? '', // YYYY-MM-DD
+            // Common bank bases: ACT/365, ACT/360 (some products), ACT/ACT
+            dayCountBasis: 'ACT_365' // Fixed to standard banking convention
+          });
+
           const [currentProfile, setCurrentProfile] = useState(() => 
             loadFromStorage('currentProfile', 'Default')
           );
@@ -152,7 +163,9 @@
                 loanData: {
             startingBalance: 0,
             startMonth: 'Jan',
-            startYear: new Date().getFullYear()
+            startYear: new Date().getFullYear(),
+            emiStartDate: '',
+            dayCountBasis: 'ACT_365'
                 },
                 roiPeriods: [],
                 emiPeriods: [],
@@ -163,10 +176,12 @@
 
           const currentProfileData = profiles[currentProfile] || profiles['Default'];
           
-          const [loanData, setLoanData] = useState(currentProfileData.loanData);
+          const [loanData, setLoanData] = useState(() => normalizeLoanData(currentProfileData.loanData));
           const [roiPeriods, setRoiPeriods] = useState(currentProfileData.roiPeriods);
           const [emiPeriods, setEmiPeriods] = useState(currentProfileData.emiPeriods);
           const [prepayments, setPrepayments] = useState(currentProfileData.prepayments);
+          const [disbursements, setDisbursements] = useState(currentProfileData.disbursements || []);
+          const [newDisbursement, setNewDisbursement] = useState({ date: '', amount: '' });
 
           const [newRoiPeriod, setNewRoiPeriod] = useState({
             month: 'Jan',
@@ -208,7 +223,7 @@
             setProfiles(updatedProfiles);
             localStorage.setItem('loanProfiles', JSON.stringify(updatedProfiles));
             localStorage.setItem('currentProfile', JSON.stringify(currentProfile));
-          }, [loanData, roiPeriods, emiPeriods, prepayments, currentProfile]);
+          }, [loanData, roiPeriods, emiPeriods, prepayments, disbursements, currentProfile]);
 
           const calculateTenure = (principal, emi, rate) => {
             const r = rate / (12 * 100);
@@ -298,17 +313,80 @@
               prepaymentMap[key] = (prepaymentMap[key] || 0) + p.amount;
             });
 
+            // Helper function to calculate days between dates
+            const getDaysBetween = (date1, date2) => {
+              if (!date1 || !date2) return 30; // fallback to 30 days if dates not provided
+              const d1 = new Date(date1 + 'T00:00:00');
+              const d2 = new Date(date2 + 'T00:00:00');
+              return Math.abs(Math.ceil((d2 - d1) / (1000 * 60 * 60 * 24)));
+            };
+
+            // Helper function to get next EMI date
+            const getNextEmiDate = (currentDate, emiDay) => {
+              if (!currentDate) return null;
+              const date = new Date(currentDate + 'T00:00:00');
+              const nextMonth = new Date(date.getFullYear(), date.getMonth() + 1, emiDay);
+              return nextMonth.toISOString().split('T')[0];
+            };
+
+            // Helper function to calculate daily interest
+            const calculateDailyInterest = (principal, annualRate, days, dayCountBasis) => {
+              let daysInYear;
+              switch (dayCountBasis) {
+                case 'ACT_365':
+                  daysInYear = 365;
+                  break;
+                case 'ACT_360':
+                  daysInYear = 360;
+                  break;
+                case 'ACT_ACT':
+                  // For ACT/ACT, we'd need to know if it's a leap year, but for simplicity using 365.25
+                  daysInYear = 365.25;
+                  break;
+                default:
+                  daysInYear = 365;
+              }
+              const dailyRate = annualRate / (100 * daysInYear);
+              return Math.round(principal * dailyRate * days);
+            };
+
             while (currentBalance > 0.01 && iteration < maxIterations) {
               iteration++;
               const monthKey = `${months[currentMonth]}-${currentYear}`;
               const openingBalance = currentBalance;
-              
+
               // Get ROI and EMI for current month
               const currentRoi = getRoiForMonth(months[currentMonth], currentYear);
               const currentEmi = getEmiForMonth(months[currentMonth], currentYear);
-              const monthlyRate = currentRoi / (12 * 100);
-              
-              const interest = Math.round(openingBalance * monthlyRate);
+
+              // Calculate daily interest accrual
+              let interest = 0;
+              if (loanData.emiStartDate) {
+                // Calculate interest for the period between EMI dates
+                const emiDay = new Date(loanData.emiStartDate + 'T00:00:00').getDate();
+
+                // Calculate the previous EMI date
+                let prevEmiDate;
+                if (iteration === 1) {
+                  prevEmiDate = loanData.emiStartDate;
+                } else {
+                  // For subsequent iterations, previous EMI was last month on the same day
+                  const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+                  const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+                  prevEmiDate = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-${String(emiDay).padStart(2, '0')}`;
+                }
+
+                // Current EMI date for this month
+                const currentEmiDate = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(emiDay).padStart(2, '0')}`;
+                const daysBetweenEmis = getDaysBetween(prevEmiDate, currentEmiDate);
+
+                // Calculate interest on the entire opening balance for the days between EMIs
+                interest = calculateDailyInterest(openingBalance, currentRoi, daysBetweenEmis, loanData.dayCountBasis || 'ACT_365');
+              } else {
+                // Fallback to monthly calculation if dates not provided
+                const monthlyRate = currentRoi / (12 * 100);
+                interest = Math.round(openingBalance * monthlyRate);
+              }
               
               // Handle last month or cases where balance is less than EMI
               let emiPrincipal;
@@ -386,29 +464,64 @@
               if (currentMonth === 0) currentYear++;
             }
 
-            // Calculate without prepayment scenario (using current ROI and EMI at start)
+            // Calculate theoretical tenure using EMI formula (bank's method)
             const startingRoi = sortedRoiPeriods[0]?.roi || 0;
             const startingEmi = sortedEmiPeriods[0]?.emi || 0;
-            const withoutPrepaymentTenure = calculateTenure(loanData.startingBalance, startingEmi, startingRoi);
-            const withoutPrepaymentInterest = withoutPrepaymentTenure < 999 
-              ? Math.round(startingEmi * withoutPrepaymentTenure - loanData.startingBalance)
-              : 0;
+            const theoreticalTenure = calculateTenure(loanData.startingBalance, startingEmi, startingRoi);
+
+            // Calculate without prepayment scenario (separate simulation)
+            let withoutPrepaymentBalance = loanData.startingBalance;
+            let withoutPrepaymentMonths = 0;
+            let withoutPrepaymentInterestTotal = 0;
+            const maxIterationsWithoutPrep = 1000;
+
+            // Use separate month/year counters for without-prepayment simulation
+            let wpMonth = months.indexOf(loanData.startMonth);
+            let wpYear = loanData.startYear;
+
+            while (withoutPrepaymentBalance > 0.01 && withoutPrepaymentMonths < maxIterationsWithoutPrep) {
+              withoutPrepaymentMonths++;
+              const currentRoi = getRoiForMonth(months[wpMonth], wpYear);
+              const monthlyRate = currentRoi / (12 * 100);
+              const interest = Math.round(withoutPrepaymentBalance * monthlyRate);
+              const principal = Math.max(0, startingEmi - interest);
+
+              if (principal <= 0) break; // EMI insufficient
+
+              withoutPrepaymentBalance -= principal;
+              withoutPrepaymentInterestTotal += interest;
+
+              // Move to next month
+              wpMonth = (wpMonth + 1) % 12;
+              if (wpMonth === 0) wpYear++;
+            }
+
+            const withoutPrepaymentTenure = withoutPrepaymentMonths;
+            const withoutPrepaymentInterest = withoutPrepaymentInterestTotal;
             
             // Calculate minimum EMI required (using starting ROI)
             const startingMonthlyRate = startingRoi / (12 * 100);
             const minEMIRequired = Math.round(loanData.startingBalance * startingMonthlyRate);
             const isEMISufficient = startingEmi > minEMIRequired;
 
+            // Calculate remaining months from current date
+            const currentDate = new Date();
+            const startDate = new Date(loanData.startYear, months.indexOf(loanData.startMonth), 1);
+            const monthsElapsed = Math.max(0, (currentDate.getFullYear() - startDate.getFullYear()) * 12 + (currentDate.getMonth() - startDate.getMonth()));
+            const remainingMonths = Math.max(0, results.length - monthsElapsed);
+
             return {
               schedule: results,
               summary: {
                 totalMonths: results.length,
+                remainingMonths: remainingMonths,
                 lastEMIMonth: results[results.length - 1]?.month || 'N/A',
                 totalInterestPaid,
                 totalPrincipalPaid,
                 totalPrepaymentsMade,
                 totalAmountPaid: totalInterestPaid + totalPrincipalPaid,
                 withoutPrepaymentMonths: withoutPrepaymentTenure,
+                theoreticalTenure: theoreticalTenure,
                 withoutPrepaymentInterest,
                 monthsSaved: Math.max(0, withoutPrepaymentTenure - results.length),
                 interestSaved: Math.max(0, withoutPrepaymentInterest - totalInterestPaid),
@@ -471,6 +584,52 @@
               ...prev,
               [field]: value
             }));
+          };
+
+          const handleDateChange = (field, value) => {
+            // value is YYYY-MM-DD (or '')
+            setLoanData(prev => ({
+              ...prev,
+              [field]: value
+            }));
+          };
+
+          const addDisbursement = () => {
+            const amountValue = parseFloat(newDisbursement.amount);
+            const dateValue = newDisbursement.date;
+            if (amountValue > 0 && dateValue) {
+              const updated = [...disbursements, { date: dateValue, amount: amountValue }];
+              // Sort disbursements by date
+              updated.sort((a, b) => new Date(a.date) - new Date(b.date));
+              setDisbursements(updated);
+              setNewDisbursement({ date: '', amount: '' });
+
+              // Update loan data with total disbursed amount
+              const totalDisbursed = updated.reduce((sum, d) => sum + d.amount, 0);
+              setLoanData(prev => ({ ...prev, startingBalance: totalDisbursed }));
+
+              // Keep startMonth/startYear in sync with first disbursement date
+              if (updated.length > 0) {
+                const firstDisbursement = updated[0];
+                const d = new Date(firstDisbursement.date + 'T00:00:00');
+                if (!isNaN(d.getTime())) {
+                  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                  setLoanData(prev => ({ ...prev, startMonth: months[d.getMonth()], startYear: d.getFullYear() }));
+                }
+              }
+            }
+          };
+
+          const removeDisbursement = (index) => {
+            const updated = disbursements.filter((_, i) => i !== index);
+            setDisbursements(updated);
+            const totalDisbursed = updated.reduce((sum, d) => sum + d.amount, 0);
+            setLoanData(prev => ({ ...prev, startingBalance: totalDisbursed }));
+          };
+
+          const clearAllDisbursements = () => {
+            setDisbursements([]);
+            setLoanData(prev => ({ ...prev, startingBalance: 0 }));
           };
 
           const addRoiPeriod = () => {
@@ -548,7 +707,10 @@
               setLoanData({
                 startingBalance: 0,
                 startMonth: 'Jan',
-                startYear: new Date().getFullYear()
+                startYear: new Date().getFullYear(),
+                disbursementDate: '',
+                emiStartDate: '',
+                dayCountBasis: 'ACT_365'
               });
               setRoiPeriods([]);
               setEmiPeriods([]);
@@ -601,7 +763,7 @@
           const createNewProfile = () => {
             if (newProfileName && !profiles[newProfileName]) {
               const newProfile = {
-                loanData: { ...loanData },
+                loanData: { ...normalizeLoanData(loanData) },
                 roiPeriods: [...roiPeriods],
                 emiPeriods: [...emiPeriods],
                 prepayments: [...prepayments]
@@ -619,7 +781,7 @@
             if (profiles[profileName]) {
               setCurrentProfile(profileName);
               const profile = profiles[profileName];
-              setLoanData(profile.loanData);
+              setLoanData(normalizeLoanData(profile.loanData));
               setRoiPeriods(profile.roiPeriods);
               setEmiPeriods(profile.emiPeriods);
               setPrepayments(profile.prepayments);
@@ -1013,6 +1175,23 @@
                             </div>
                           </div>
 
+                          {/* Disbursements */}
+                          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                            <h4 className="font-bold text-green-800 mb-2">💰 Disbursements ({disbursements.length})</h4>
+                            <div className="space-y-1 text-sm">
+                              {disbursements.map((disb, idx) => (
+                                <div key={idx} className="bg-white p-2 rounded">
+                                  <span className="font-semibold">Disbursement {idx + 1}:</span> ₹{disb.amount.toLocaleString('en-IN')} on {new Date(disb.date).toLocaleDateString('en-IN')}
+                                </div>
+                              ))}
+                              {disbursements.length > 0 && (
+                                <div className="bg-green-100 p-2 rounded font-bold">
+                                  Total Disbursed: ₹{disbursements.reduce((sum, d) => sum + d.amount, 0).toLocaleString('en-IN')}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
                           {/* Prepayments */}
                           <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
                             <h4 className="font-bold text-blue-800 mb-2">🎯 Prepayments ({prepayments.length})</h4>
@@ -1037,7 +1216,16 @@
                             <h4 className="font-bold text-indigo-800 mb-2">📊 Calculation Results</h4>
                             <div className="space-y-2 text-sm">
                               <div className="bg-white p-2 rounded">
-                                <span className="font-semibold">Total Months:</span> {projectionData.schedule.length} months ({Math.floor(projectionData.schedule.length / 12)} years {projectionData.schedule.length % 12} months)
+                                <span className="font-semibold">Remaining Months:</span> {projectionData.summary.remainingMonths} months ({Math.floor(projectionData.summary.remainingMonths / 12)} years {projectionData.summary.remainingMonths % 12} months)
+                              </div>
+                              <div className="bg-white p-2 rounded">
+                                <span className="font-semibold">Total Tenure:</span> {projectionData.schedule.length} months ({Math.floor(projectionData.schedule.length / 12)} years {projectionData.schedule.length % 12} months)
+                              </div>
+                              <div className="bg-white p-2 rounded">
+                                <span className="font-semibold">Bank EMI Formula Tenure:</span> {projectionData.summary.theoreticalTenure} months ({Math.floor(projectionData.summary.theoreticalTenure / 12)} years {projectionData.summary.theoreticalTenure % 12} months)
+                              </div>
+                              <div className="bg-white p-2 rounded">
+                                <span className="font-semibold">Theoretical Tenure (EMI Formula):</span> {projectionData.summary.theoreticalTenure} months ({Math.floor(projectionData.summary.theoreticalTenure / 12)} years {projectionData.summary.theoreticalTenure % 12} months)
                               </div>
                               <div className="bg-white p-2 rounded">
                                 <span className="font-semibold">Total Interest Paid:</span> ₹{projectionData.summary.totalInterestPaid.toLocaleString('en-IN')}
@@ -1065,7 +1253,9 @@
                                 roiPeriods,
                                 emiPeriods,
                                 prepayments,
-                                calculatedMonths: projectionData.schedule.length
+                                disbursements,
+                                calculatedMonths: projectionData.schedule.length,
+                                remainingMonths: projectionData.summary.remainingMonths
                               }, null, 2)}
                               onClick={(e) => e.target.select()}
                             />
@@ -1260,6 +1450,55 @@
                             placeholder="Loan Amount (₹)"
                         min="0"
                       />
+                      <div className="col-span-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-medium text-gray-700">Disbursements</span>
+                          {disbursements.length > 0 && (
+                            <button onClick={clearAllDisbursements} className="text-xs text-red-600 hover:text-red-800">Clear</button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-3 gap-1 mb-2">
+                          <input
+                            type="date"
+                            value={newDisbursement.date}
+                            onChange={(e) => setNewDisbursement(prev => ({ ...prev, date: e.target.value }))}
+                            className="px-2 py-1.5 border border-gray-300 rounded text-xs outline-none"
+                            placeholder="Date"
+                          />
+                          <input
+                            type="number"
+                            value={newDisbursement.amount}
+                            onChange={(e) => setNewDisbursement(prev => ({ ...prev, amount: e.target.value }))}
+                            className="px-2 py-1.5 border border-gray-300 rounded text-xs outline-none"
+                            placeholder="Amount"
+                            onKeyPress={(e) => e.key === 'Enter' && addDisbursement()}
+                          />
+                          <button
+                            onClick={addDisbursement}
+                            className="bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold"
+                          >
+                            +
+                          </button>
+                        </div>
+                        {disbursements.length > 0 && (
+                          <div className="space-y-1 max-h-20 overflow-y-auto">
+                            {disbursements.map((disb, idx) => (
+                              <div key={idx} className="bg-blue-50 rounded px-2 py-1 flex justify-between items-center text-xs">
+                                <span><strong>₹{disb.amount.toLocaleString('en-IN')}</strong> on {new Date(disb.date).toLocaleDateString('en-IN')}</span>
+                                <button onClick={() => removeDisbursement(idx)} className="text-red-500 hover:text-red-700 font-bold">✕</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <input
+                        type="date"
+                        value={loanData.emiStartDate || ''}
+                        onChange={(e) => handleDateChange('emiStartDate', e.target.value)}
+                        className="col-span-3 px-3 py-2 border border-gray-300 rounded text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-200 outline-none"
+                        placeholder="EMI Start Date"
+                        title="First EMI Date (when EMI starts)"
+                      />
                       <select
                         value={loanData.startMonth}
                         onChange={(e) => handleStartDateChange('startMonth', e.target.value)}
@@ -1278,6 +1517,7 @@
                         min="2000"
                         max="2100"
                       />
+                      {/* Interest basis hidden - using ACT/365 as standard */}
                     </div>
                     </div>
 
@@ -1582,7 +1822,7 @@
                       <p className="text-xs font-semibold">Last EMI</p>
                     </div>
                     <p className="text-xl font-bold">{projectionData.summary.lastEMIMonth}</p>
-                    <p className="text-xs opacity-80 mt-0.5">{projectionData.summary.totalMonths} months</p>
+                    <p className="text-xs opacity-80 mt-0.5">{projectionData.summary.remainingMonths} months left</p>
                   </div>
                   <div className="bg-gradient-to-br from-yellow-500 to-orange-600 rounded-lg p-4 text-white shadow">
                     <div className="flex items-center gap-1.5 mb-1.5">
@@ -1649,8 +1889,8 @@
                     <div>
                             <h2 className="text-2xl font-bold text-white">📅 Payment Schedule</h2>
                       <p className="text-sm text-indigo-100 mt-1">
-                              {Math.floor(projectionData.schedule.length / 12)}y {projectionData.schedule.length % 12}m • 
-                              Final: {projectionData.summary.lastEMIMonth} • {statusBadge}
+                              {Math.floor(projectionData.summary.remainingMonths / 12)}y {projectionData.summary.remainingMonths % 12}m •
+                              Final: {projectionData.summary.lastEMIMonth} • 📍 Current: {new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
                     </p>
                   </div>
                     {projectionData.schedule.length > 13 && (
@@ -1658,7 +1898,7 @@
                         onClick={() => setShowAllRows(!showAllRows)}
                               className="bg-white text-indigo-600 px-4 py-2 rounded-lg font-semibold hover:bg-indigo-50 text-sm"
                       >
-                              {showAllRows ? `📍 Current Month` : `📋 All ${projectionData.schedule.length}`}
+                              {showAllRows ? `📍 Current Month` : `📋 All ${projectionData.summary.remainingMonths} for remaining`}
                       </button>
                     )}
                 </div>
@@ -1870,7 +2110,8 @@
                         <h4 className="font-bold text-blue-800 mb-2">🎉 Loan Completion:</h4>
                         <div className="text-sm text-gray-700">
                           <p className="font-semibold text-lg">{projectionData.summary.lastEMIMonth}</p>
-                          <p className="text-xs text-blue-600 mt-1">Total: {projectionData.summary.totalMonths} months ({Math.floor(projectionData.summary.totalMonths / 12)} years {projectionData.summary.totalMonths % 12} months)</p>
+                          <p className="text-xs text-blue-600 mt-1">Remaining: {projectionData.summary.remainingMonths} months ({Math.floor(projectionData.summary.remainingMonths / 12)} years {projectionData.summary.remainingMonths % 12} months)</p>
+                          <p className="text-xs text-gray-500 mt-1">Total tenure: {projectionData.summary.totalMonths} months</p>
                         </div>
                       </div>
                     </div>
