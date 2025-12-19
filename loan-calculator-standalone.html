@@ -495,8 +495,8 @@
               if (actualPrepayment > 0) {
                 const tenureBeforePrepayment = calculateTenure(balanceAfterEMI, currentEmi, currentRoi);
                 const tenureAfterPrepayment = calculateTenure(closingBalance, currentEmi, currentRoi);
-                // Round to nearest whole month for display
-                monthsReducedByPrepayment = Math.round(tenureBeforePrepayment - tenureAfterPrepayment);
+                // Use ceiling to avoid undercounting saved months (bank-style rounding up)
+                monthsReducedByPrepayment = Math.max(0, Math.ceil(tenureBeforePrepayment - tenureAfterPrepayment));
               }
 
               totalInterestPaid += interest;
