@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -358,74 +359,6 @@
               });
             };
 
-            // Simulate remaining tenure from the month AFTER the current one,
-            // using full ROI/EMI schedules and no prepayments (bank-style reduction calculation).
-            const simulateRemainingTenure = (openingBalance, startMonthIdx, startYear, excludePrepaymentKey = null, skipFirstMonthPrepayKey = null) => {
-              let simBalance = openingBalance;
-              // Start from the current month; current month's prepayment is optionally skipped to avoid double-count
-              let mIdx = startMonthIdx;
-              let yVal = startYear;
-              let monthsCount = 0;
-              let guard = 0;
-              const guardMax = 2000;
-
-              while ((simBalance > 0.01 || hasPendingDisbursements(mIdx, yVal)) && guard < guardMax) {
-                guard++;
-                const monthKey = `${months[mIdx]}-${yVal}`;
-                const currentRoi = getRoiForMonth(months[mIdx], yVal);
-                const currentEmi = getEmiForMonth(months[mIdx], yVal);
-
-                // Interest on opening balance (use daily method if we have emiStartDate)
-                let interest = 0;
-                if (loanData.emiStartDate) {
-                  const emiDay = new Date(loanData.emiStartDate + 'T00:00:00').getDate();
-                  const prevMonth = mIdx === 0 ? 11 : mIdx - 1;
-                  const prevYear = mIdx === 0 ? yVal - 1 : yVal;
-                  const prevEmiDate = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-${String(emiDay).padStart(2, '0')}`;
-                  const currentEmiDate = `${yVal}-${String(mIdx + 1).padStart(2, '0')}-${String(emiDay).padStart(2, '0')}`;
-                  const daysBetweenEmis = getDaysBetween(prevEmiDate, currentEmiDate);
-                  interest = calculateDailyInterest(simBalance, currentRoi, daysBetweenEmis, loanData.dayCountBasis || 'ACT_365');
-                } else {
-                  const monthlyRate = currentRoi / (12 * 100);
-                  interest = Math.round(simBalance * monthlyRate);
-                }
-
-                // Add disbursements for this month
-                const disb = disbursementMap[monthKey] || 0;
-                const balanceAfterDisbursement = simBalance + disb;
-
-                const totalDue = balanceAfterDisbursement + interest;
-                let emiPrincipal;
-                let actualEMI;
-
-                if (totalDue <= currentEmi) {
-                  // Last payment month: pay it off
-                  actualEMI = totalDue;
-                  emiPrincipal = balanceAfterDisbursement;
-                  simBalance = 0;
-                } else {
-                  // Normal EMI month
-                  actualEMI = currentEmi;
-                  emiPrincipal = Math.max(0, actualEMI - interest);
-                  if (emiPrincipal <= 0) emiPrincipal = 0;
-                  simBalance = Math.max(0, balanceAfterDisbursement - emiPrincipal);
-                }
-
-                // Apply future prepayments (except the excluded one) AFTER EMI, mirroring main logic
-                const plannedPrepay = prepaymentMap[monthKey] || 0;
-                const shouldSkipFirst = skipFirstMonthPrepayKey && monthKey === skipFirstMonthPrepayKey;
-                const effectivePrepay = (excludePrepaymentKey === monthKey || shouldSkipFirst) ? 0 : plannedPrepay;
-                const actualPrepay = Math.min(simBalance, effectivePrepay);
-                simBalance = Math.max(0, simBalance - actualPrepay);
-
-                monthsCount++;
-                mIdx = (mIdx + 1) % 12;
-                if (mIdx === 0) yVal++;
-              }
-
-              return monthsCount;
-            };
-
             // Helper function to calculate days between dates
             const getDaysBetween = (date1, date2) => {
               if (!date1 || !date2) return 30; // fallback to 30 days if dates not provided
@@ -561,24 +494,10 @@
               // Calculate months reduced ONLY if there's a prepayment
               let monthsReducedByPrepayment = 0;
               if (actualPrepayment > 0) {
-                // Bank-style: compare remaining tenure with and without this prepayment,
-                // using the actual ROI/EMI schedules going forward, and keeping other future prepayments.
-                const monthsWithoutThisPrepay = simulateRemainingTenure(
-                  balanceAfterEMI,
-                  currentMonth,
-                  currentYear,
-                  monthKey,
-                  monthKey // skip current prepay in first month
-                );
-                const monthsWithThisPrepay = simulateRemainingTenure(
-                  closingBalance,
-                  currentMonth,
-                  currentYear,
-                  null,
-                  monthKey // skip current prepay in first month; already applied in closingBalance
-                );
-                const rawDiff = monthsWithoutThisPrepay - monthsWithThisPrepay;
-                monthsReducedByPrepayment = Math.max(0, Math.floor(rawDiff));
+                const tenureBeforePrepayment = calculateTenure(balanceAfterEMI, currentEmi, currentRoi);
+                const tenureAfterPrepayment = calculateTenure(closingBalance, currentEmi, currentRoi);
+                // Round to nearest whole month for display
+                monthsReducedByPrepayment = Math.round(tenureBeforePrepayment - tenureAfterPrepayment);
               }
 
               totalInterestPaid += interest;
