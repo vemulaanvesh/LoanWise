@@ -362,8 +362,9 @@
             // using full ROI/EMI schedules and no prepayments (bank-style reduction calculation).
             const simulateRemainingTenure = (openingBalance, startMonthIdx, startYear) => {
               let simBalance = openingBalance;
-              let mIdx = startMonthIdx;
-              let yVal = startYear;
+              // Start from the month AFTER the current one (bank-style: prepayment reduces future EMIs)
+              let mIdx = (startMonthIdx + 1) % 12;
+              let yVal = startYear + (startMonthIdx === 11 ? 1 : 0);
               let monthsCount = 0;
               let guard = 0;
               const guardMax = 2000;
