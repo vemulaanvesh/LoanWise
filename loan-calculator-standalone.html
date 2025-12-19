@@ -564,7 +564,9 @@
                 // using the actual ROI/EMI schedules going forward, and keeping other future prepayments.
                 const monthsWithoutThisPrepay = simulateRemainingTenure(balanceAfterEMI, currentMonth, currentYear, monthKey);
                 const monthsWithThisPrepay = simulateRemainingTenure(closingBalance, currentMonth, currentYear, null);
-                monthsReducedByPrepayment = Math.max(0, monthsWithoutThisPrepay - monthsWithThisPrepay);
+                const rawDiff = monthsWithoutThisPrepay - monthsWithThisPrepay;
+                // Use floor to avoid over-counting fractional savings (closer to bank outputs)
+                monthsReducedByPrepayment = Math.max(0, Math.floor(rawDiff));
               }
 
               totalInterestPaid += interest;
