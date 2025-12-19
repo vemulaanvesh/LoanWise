@@ -360,11 +360,11 @@
 
             // Simulate remaining tenure from the month AFTER the current one,
             // using full ROI/EMI schedules and no prepayments (bank-style reduction calculation).
-            const simulateRemainingTenure = (openingBalance, startMonthIdx, startYear, excludePrepaymentKey = null) => {
+            const simulateRemainingTenure = (openingBalance, startMonthIdx, startYear, excludePrepaymentKey = null, skipFirstMonthPrepayKey = null) => {
               let simBalance = openingBalance;
-              // Start from the month AFTER the current one (bank-style: prepayment reduces future EMIs)
-              let mIdx = (startMonthIdx + 1) % 12;
-              let yVal = startYear + (startMonthIdx === 11 ? 1 : 0);
+              // Start from the current month; current month's prepayment is optionally skipped to avoid double-count
+              let mIdx = startMonthIdx;
+              let yVal = startYear;
               let monthsCount = 0;
               let guard = 0;
               const guardMax = 2000;
@@ -413,7 +413,8 @@
 
                 // Apply future prepayments (except the excluded one) AFTER EMI, mirroring main logic
                 const plannedPrepay = prepaymentMap[monthKey] || 0;
-                const effectivePrepay = (excludePrepaymentKey === monthKey) ? 0 : plannedPrepay;
+                const shouldSkipFirst = skipFirstMonthPrepayKey && monthKey === skipFirstMonthPrepayKey;
+                const effectivePrepay = (excludePrepaymentKey === monthKey || shouldSkipFirst) ? 0 : plannedPrepay;
                 const actualPrepay = Math.min(simBalance, effectivePrepay);
                 simBalance = Math.max(0, simBalance - actualPrepay);
 
@@ -562,10 +563,21 @@
               if (actualPrepayment > 0) {
                 // Bank-style: compare remaining tenure with and without this prepayment,
                 // using the actual ROI/EMI schedules going forward, and keeping other future prepayments.
-                const monthsWithoutThisPrepay = simulateRemainingTenure(balanceAfterEMI, currentMonth, currentYear, monthKey);
-                const monthsWithThisPrepay = simulateRemainingTenure(closingBalance, currentMonth, currentYear, null);
+                const monthsWithoutThisPrepay = simulateRemainingTenure(
+                  balanceAfterEMI,
+                  currentMonth,
+                  currentYear,
+                  monthKey,
+                  monthKey // skip current prepay in first month
+                );
+                const monthsWithThisPrepay = simulateRemainingTenure(
+                  closingBalance,
+                  currentMonth,
+                  currentYear,
+                  null,
+                  monthKey // skip current prepay in first month; already applied in closingBalance
+                );
                 const rawDiff = monthsWithoutThisPrepay - monthsWithThisPrepay;
-                // Use floor to avoid over-counting fractional savings (closer to bank outputs)
                 monthsReducedByPrepayment = Math.max(0, Math.floor(rawDiff));
               }
 
