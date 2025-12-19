@@ -394,31 +394,28 @@
                 const disb = disbursementMap[monthKey] || 0;
                 const balanceAfterDisbursement = simBalance + disb;
 
-                // Apply future prepayments (except the excluded one)
-                const plannedPrepay = prepaymentMap[monthKey] || 0;
-                const effectivePrepay = (excludePrepaymentKey === monthKey) ? 0 : plannedPrepay;
-                const actualPrepay = Math.min(balanceAfterDisbursement + interest, effectivePrepay);
-
                 const totalDue = balanceAfterDisbursement + interest;
                 let emiPrincipal;
                 let actualEMI;
 
                 if (totalDue <= currentEmi) {
-                  // If total due is less than EMI, pay it all and finish (prepay already applied above)
-                  const remainingAfterPrepay = Math.max(0, totalDue - actualPrepay);
-                  actualEMI = remainingAfterPrepay;
-                  emiPrincipal = Math.max(0, balanceAfterDisbursement - actualPrepay);
+                  // Last payment month: pay it off
+                  actualEMI = totalDue;
+                  emiPrincipal = balanceAfterDisbursement;
                   simBalance = 0;
                 } else {
-                  // Normal month: apply EMI after prepayment
-                  const postPrepayBalance = Math.max(0, balanceAfterDisbursement - actualPrepay);
-                  const postPrepayTotalDue = postPrepayBalance + interest;
-
+                  // Normal EMI month
                   actualEMI = currentEmi;
                   emiPrincipal = Math.max(0, actualEMI - interest);
                   if (emiPrincipal <= 0) emiPrincipal = 0;
-                  simBalance = Math.max(0, postPrepayBalance - emiPrincipal);
+                  simBalance = Math.max(0, balanceAfterDisbursement - emiPrincipal);
                 }
+
+                // Apply future prepayments (except the excluded one) AFTER EMI, mirroring main logic
+                const plannedPrepay = prepaymentMap[monthKey] || 0;
+                const effectivePrepay = (excludePrepaymentKey === monthKey) ? 0 : plannedPrepay;
+                const actualPrepay = Math.min(simBalance, effectivePrepay);
+                simBalance = Math.max(0, simBalance - actualPrepay);
 
                 monthsCount++;
                 mIdx = (mIdx + 1) % 12;
