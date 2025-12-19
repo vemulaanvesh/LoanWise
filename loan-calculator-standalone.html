@@ -360,7 +360,7 @@
 
             // Simulate remaining tenure from the month AFTER the current one,
             // using full ROI/EMI schedules and no prepayments (bank-style reduction calculation).
-            const simulateRemainingTenure = (openingBalance, startMonthIdx, startYear) => {
+            const simulateRemainingTenure = (openingBalance, startMonthIdx, startYear, excludePrepaymentKey = null) => {
               let simBalance = openingBalance;
               // Start from the month AFTER the current one (bank-style: prepayment reduces future EMIs)
               let mIdx = (startMonthIdx + 1) % 12;
@@ -394,19 +394,30 @@
                 const disb = disbursementMap[monthKey] || 0;
                 const balanceAfterDisbursement = simBalance + disb;
 
+                // Apply future prepayments (except the excluded one)
+                const plannedPrepay = prepaymentMap[monthKey] || 0;
+                const effectivePrepay = (excludePrepaymentKey === monthKey) ? 0 : plannedPrepay;
+                const actualPrepay = Math.min(balanceAfterDisbursement + interest, effectivePrepay);
+
                 const totalDue = balanceAfterDisbursement + interest;
                 let emiPrincipal;
                 let actualEMI;
 
                 if (totalDue <= currentEmi) {
-                  actualEMI = totalDue;
-                  emiPrincipal = balanceAfterDisbursement;
+                  // If total due is less than EMI, pay it all and finish (prepay already applied above)
+                  const remainingAfterPrepay = Math.max(0, totalDue - actualPrepay);
+                  actualEMI = remainingAfterPrepay;
+                  emiPrincipal = Math.max(0, balanceAfterDisbursement - actualPrepay);
                   simBalance = 0;
                 } else {
+                  // Normal month: apply EMI after prepayment
+                  const postPrepayBalance = Math.max(0, balanceAfterDisbursement - actualPrepay);
+                  const postPrepayTotalDue = postPrepayBalance + interest;
+
                   actualEMI = currentEmi;
-                  emiPrincipal = Math.max(0, currentEmi - interest);
+                  emiPrincipal = Math.max(0, actualEMI - interest);
                   if (emiPrincipal <= 0) emiPrincipal = 0;
-                  simBalance = Math.max(0, balanceAfterDisbursement - emiPrincipal);
+                  simBalance = Math.max(0, postPrepayBalance - emiPrincipal);
                 }
 
                 monthsCount++;
@@ -553,9 +564,9 @@
               let monthsReducedByPrepayment = 0;
               if (actualPrepayment > 0) {
                 // Bank-style: compare remaining tenure with and without this prepayment,
-                // using the actual ROI/EMI schedules going forward.
-                const monthsWithoutThisPrepay = simulateRemainingTenure(balanceAfterEMI, currentMonth, currentYear);
-                const monthsWithThisPrepay = simulateRemainingTenure(closingBalance, currentMonth, currentYear);
+                // using the actual ROI/EMI schedules going forward, and keeping other future prepayments.
+                const monthsWithoutThisPrepay = simulateRemainingTenure(balanceAfterEMI, currentMonth, currentYear, monthKey);
+                const monthsWithThisPrepay = simulateRemainingTenure(closingBalance, currentMonth, currentYear, null);
                 monthsReducedByPrepayment = Math.max(0, monthsWithoutThisPrepay - monthsWithThisPrepay);
               }
 
