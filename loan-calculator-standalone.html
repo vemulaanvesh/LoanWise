@@ -246,7 +246,9 @@
 
           const projectionData = useMemo(() => {
             const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            let currentBalance = loanData.startingBalance;
+            const hasDisbursements = disbursements.length > 0;
+            const initialPrincipal = hasDisbursements ? 0 : (loanData.startingBalance || 0);
+            let currentBalance = initialPrincipal;
             let currentMonth = months.indexOf(loanData.startMonth);
             let currentYear = loanData.startYear;
             const results = [];
@@ -345,6 +347,17 @@
               disbursementMap[key] = (disbursementMap[key] || 0) + d.amount;
             });
 
+            // Check if there are disbursements scheduled for or after a given month/year
+            const hasPendingDisbursements = (monthIdx, year) => {
+              const keys = Object.keys(disbursementMap);
+              return keys.some(key => {
+                const [mStr, yStr] = key.split('-');
+                const mIdx = months.indexOf(mStr);
+                const yNum = parseInt(yStr, 10);
+                return yNum > year || (yNum === year && mIdx >= monthIdx);
+              });
+            };
+
             // Helper function to calculate days between dates
             const getDaysBetween = (date1, date2) => {
               if (!date1 || !date2) return 30; // fallback to 30 days if dates not provided
@@ -386,14 +399,14 @@
             if (prepayments.length > 0) {
               console.log('');
               console.log('STARTING LOAN CALCULATION WITH PREPAYMENTS');
-              console.log('  • Starting Balance:', '₹' + (loanData.startingBalance / 100000).toFixed(2) + 'L');
+              console.log('  • Starting Balance:', '₹' + (initialPrincipal / 100000).toFixed(2) + 'L');
               console.log('  • Start Month/Year:', loanData.startMonth, loanData.startYear);
               console.log('  • Prepayment Count:', prepayments.length);
               console.log('  • Prepayments:', prepayments.map(p => `₹${(p.amount / 100000).toFixed(2)}L in ${p.month} ${p.year}`).join(', '));
               console.log('');
             }
             
-            while (currentBalance > 0.01 && iteration < maxIterations) {
+            while ((currentBalance > 0.01 || hasPendingDisbursements(currentMonth, currentYear)) && iteration < maxIterations) {
               iteration++;
               const monthKey = `${months[currentMonth]}-${currentYear}`;
               const openingBalance = currentBalance;
@@ -532,7 +545,7 @@
             // Calculate theoretical tenure using EMI formula (bank's method)
             const startingRoi = sortedRoiPeriods[0]?.roi || 0;
             const startingEmi = sortedEmiPeriods[0]?.emi || 0;
-            const theoreticalTenure = Math.ceil(calculateTenure(loanData.startingBalance, startingEmi, startingRoi));
+            const theoreticalTenure = Math.ceil(calculateTenure(initialPrincipal, startingEmi, startingRoi));
 
             // Calculate minimum EMI and check sufficiency
             // Find the maximum interest paid in any single month (this is the minimum EMI needed)
@@ -575,11 +588,11 @@
             // This simulates what would happen with same EMI, ROI, and disbursements but NO prepayments
             console.log('');
             console.log('STARTING WITHOUT-PREPAYMENT SCENARIO...');
-            console.log('  • Starting Balance:', '₹' + (loanData.startingBalance / 100000).toFixed(2) + 'L');
+            console.log('  • Starting Balance:', '₹' + (initialPrincipal / 100000).toFixed(2) + 'L');
             console.log('  • Start Month/Year:', loanData.startMonth, loanData.startYear);
             console.log('');
             
-            let withoutPrepaymentBalance = loanData.startingBalance;
+            let withoutPrepaymentBalance = initialPrincipal;
             let withoutPrepaymentMonths = 0;
             let withoutPrepaymentInterestTotal = 0;
             const maxIterationsWithoutPrep = 1000;
@@ -590,7 +603,7 @@
             let wpIteration = 0;
 
             let wpDebugCount = 0;
-            while (withoutPrepaymentBalance > 0.01 && wpIteration < maxIterationsWithoutPrep) {
+            while ((withoutPrepaymentBalance > 0.01 || hasPendingDisbursements(wpMonth, wpYear)) && wpIteration < maxIterationsWithoutPrep) {
               wpIteration++;
               const monthKey = `${months[wpMonth]}-${wpYear}`;
               const wpOpeningBalance = withoutPrepaymentBalance;
@@ -1730,7 +1743,7 @@
                     {/* Principal */}
                     <div className="bg-blue-500 bg-opacity-90 rounded-lg p-3 text-white">
                       <p className="text-xs opacity-90 mb-1">Principal</p>
-                      <p className="text-lg font-bold">₹{(((loanData?.startingBalance || 0) + (projectionData?.summary?.totalDisbursementsMade || 0)) / 100000).toFixed(2)}L</p>
+                      <p className="text-lg font-bold">₹{(((disbursements.length > 0 ? (projectionData?.summary?.totalDisbursementsMade || 0) : (loanData?.startingBalance || 0))) / 100000).toFixed(2)}L</p>
                     </div>
 
                     {/* Interest */}

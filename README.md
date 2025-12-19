@@ -1,32 +1,32 @@
-# 📚 LoanWise - Smart Loan Calculator
+# LoanWise - Smart Loan Calculator
 
 ![LoanWise Logo](https://img.shields.io/badge/LoanWise-Make%20Smarter%20Loan%20Decisions-yellow?style=for-the-badge)
 
-## 🎯 About
+## About
 
 **LoanWise** is a free, powerful loan calculator that helps you plan your EMI, track prepayments, and save thousands in interest. With support for variable ROI and EMI periods, you can make smarter financial decisions.
 
-### ✨ Key Features
+### Key Features
 
-- 📊 **Variable ROI Support** - Handle changing interest rates over time
-- 💰 **Variable EMI Support** - Track EMI changes across different periods
-- 🎯 **Prepayment Planning** - See exactly how much you save with prepayments
-- 📈 **Visual Progress** - Track your loan payoff journey with intuitive charts
-- 👤 **Multiple Profiles** - Save different loan scenarios
-- 💾 **Auto-Save** - Your data persists in browser (100% private)
-- 🔒 **Privacy First** - All data stays in your browser, never sent to servers
-- 📱 **Responsive Design** - Works perfectly on mobile and desktop
-- 🆓 **Completely Free** - No ads, no tracking, no hidden fees
+- **Variable ROI Support** - Handle changing interest rates over time
+- **Variable EMI Support** - Track EMI changes across different periods
+- **Prepayment Planning** - See exactly how much you save with prepayments
+- **Visual Progress** - Track your loan payoff journey with intuitive charts
+- **Multiple Profiles** - Save different loan scenarios
+- **Auto-Save** - Your data persists in browser (100% private)
+- **Privacy First** - All data stays in your browser, never sent to servers
+- **Responsive Design** - Works perfectly on mobile and desktop
+- **Completely Free** - No ads, no tracking, no hidden fees
 
-## 🚀 Live Demo
+## Live Demo
 
 **[Try LoanWise Now!](https://loanwise.netlify.app)** _(Update this URL after deploying)_
 
-## 📸 Screenshots
+## Screenshots
 
 _Add screenshots here after deployment_
 
-## 🛠️ Technology
+## Technology
 
 Built with:
 - React 18
@@ -34,7 +34,7 @@ Built with:
 - Pure JavaScript
 - LocalStorage API
 
-## 💡 How to Use
+## How to Use
 
 1. **Enter Your Loan Details**: Starting balance, start date
 2. **Add ROI Periods**: Define interest rates for different time periods
@@ -43,14 +43,14 @@ Built with:
 5. **View Projections**: See complete month-by-month breakdown
 6. **Export Data**: Download your loan schedule as CSV
 
-## 🌟 Why LoanWise?
+## Why LoanWise?
 
 - **Save Thousands**: See exactly how prepayments reduce your interest
 - **Smart Planning**: Variable ROI and EMI support for real-world scenarios
 - **Complete Privacy**: No data collection, no tracking, no servers
 - **100% Free**: No premium features, no paywalls
 
-## 📝 Installation
+## Installation
 
 ### For Users
 Just visit the [live demo link](https://loanwise.netlify.app) - no installation needed!
@@ -64,14 +64,14 @@ git clone https://github.com/yourusername/LoanWise.git
 open loan-calculator-standalone.html
 ```
 
-## 🤝 Contributing
+## Contributing
 
 Found a bug or have a feature request? 
 
-- 📧 Email: didyouknowmyemail@gmail.com
-- 💬 Open an issue on GitHub
+- Email: didyouknowmyemail@gmail.com
+- Open an issue on GitHub
 
-## ☕ Support
+## Support
 
 If LoanWise helped you save money, consider supporting its development!
 
