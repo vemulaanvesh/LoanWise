@@ -80,6 +80,14 @@
                 <polyline points="17 18 23 18 23 12"/>
             </svg>
         );
+        
+        const AlertCircle = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+        );
 
         const Zap = () => (
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -233,7 +241,7 @@
             if (principal <= 0) return 0;
             if (emi <= principal * r) return 999;
             const n = Math.log(emi / (emi - principal * r)) / Math.log(1 + r);
-            return Math.ceil(n);
+            return n; // Return exact value, don't round here
           };
 
           const projectionData = useMemo(() => {
@@ -246,6 +254,7 @@
             let totalPrincipalPaid = 0;
             let totalPrepaymentsMade = 0;
             let totalDisbursementsMade = 0;
+            let maxBalance = currentBalance;
             let iteration = 0;
             const maxIterations = 1000; // Increased from 300 to handle longer tenures
 
@@ -316,6 +325,16 @@
               const key = `${p.month}-${p.year}`;
               prepaymentMap[key] = (prepaymentMap[key] || 0) + p.amount;
             });
+            
+            // Debug: Log prepayment data
+            console.log('========================================');
+            console.log('PREPAYMENTS DATA');
+            console.log('========================================');
+            console.log('Total Prepayments Entered:', prepayments.length);
+            console.log('Prepayments:', prepayments);
+            console.log('Prepayment Map Keys:', Object.keys(prepaymentMap));
+            console.log('Total Prepayment Amount:', '₹' + (prepayments.reduce((sum, p) => sum + (p.amount || 0), 0) / 100000).toFixed(2) + 'L');
+            console.log('========================================');
 
             const disbursementMap = {};
             disbursements.forEach(d => {
@@ -363,20 +382,27 @@
               return Math.round(principal * dailyRate * days);
             };
 
+            // Debug: Log calculation start
+            if (prepayments.length > 0) {
+              console.log('');
+              console.log('STARTING LOAN CALCULATION WITH PREPAYMENTS');
+              console.log('  • Starting Balance:', '₹' + (loanData.startingBalance / 100000).toFixed(2) + 'L');
+              console.log('  • Start Month/Year:', loanData.startMonth, loanData.startYear);
+              console.log('  • Prepayment Count:', prepayments.length);
+              console.log('  • Prepayments:', prepayments.map(p => `₹${(p.amount / 100000).toFixed(2)}L in ${p.month} ${p.year}`).join(', '));
+              console.log('');
+            }
+            
             while (currentBalance > 0.01 && iteration < maxIterations) {
               iteration++;
               const monthKey = `${months[currentMonth]}-${currentYear}`;
               const openingBalance = currentBalance;
 
-              // Add disbursements for this month (if any)
-              const disbursementThisMonth = disbursementMap[monthKey] || 0;
-              currentBalance += disbursementThisMonth;
-
               // Get ROI and EMI for current month
               const currentRoi = getRoiForMonth(months[currentMonth], currentYear);
               const currentEmi = getEmiForMonth(months[currentMonth], currentYear);
 
-              // Calculate daily interest accrual
+              // Calculate daily interest accrual on opening balance (before disbursements)
               let interest = 0;
               if (loanData.emiStartDate) {
                 // Calculate interest for the period between EMI dates
@@ -404,11 +430,17 @@
                 const monthlyRate = currentRoi / (12 * 100);
                 interest = Math.round(openingBalance * monthlyRate);
               }
-              
+
+              // Add disbursements for this month (before EMI calculation)
+              const disbursementThisMonth = disbursementMap[monthKey] || 0;
+              const balanceAfterDisbursement = openingBalance + disbursementThisMonth;
+              currentBalance = balanceAfterDisbursement;
+              maxBalance = Math.max(maxBalance, currentBalance);
+
               // Handle last month or cases where balance is less than EMI
               let emiPrincipal;
               let actualEMI;
-              const totalDue = openingBalance + interest;
+              const totalDue = balanceAfterDisbursement + interest;
               
               if (totalDue <= currentEmi) {
                 // Last month - pay remaining balance + interest
@@ -426,21 +458,32 @@
                 }
               }
               
-              const balanceAfterEMI = Math.max(0, openingBalance - emiPrincipal);
-              
+              const balanceAfterEMI = Math.max(0, balanceAfterDisbursement - emiPrincipal);
+
               const prepaymentThisMonth = prepaymentMap[monthKey] || 0;
-              const actualPrepayment = balanceAfterEMI > prepaymentThisMonth 
-                ? prepaymentThisMonth 
+              const actualPrepayment = balanceAfterEMI > prepaymentThisMonth
+                ? prepaymentThisMonth
                 : balanceAfterEMI;
-              
+
               const closingBalance = Math.max(0, balanceAfterEMI - actualPrepayment);
+              
+              // Debug: Log when prepayment is applied
+              if (prepaymentThisMonth > 0) {
+                console.log(`Prepayment Applied in ${monthKey}:`, {
+                  planned: '₹' + (prepaymentThisMonth / 100000).toFixed(2) + 'L',
+                  actual: '₹' + (actualPrepayment / 100000).toFixed(2) + 'L',
+                  balanceBeforePrepayment: '₹' + (balanceAfterEMI / 100000).toFixed(2) + 'L',
+                  balanceAfterPrepayment: '₹' + (closingBalance / 100000).toFixed(2) + 'L'
+                });
+              }
               
               // Calculate months reduced ONLY if there's a prepayment
               let monthsReducedByPrepayment = 0;
               if (actualPrepayment > 0) {
                 const tenureBeforePrepayment = calculateTenure(balanceAfterEMI, currentEmi, currentRoi);
                 const tenureAfterPrepayment = calculateTenure(closingBalance, currentEmi, currentRoi);
-                monthsReducedByPrepayment = tenureBeforePrepayment - tenureAfterPrepayment;
+                // Round to nearest whole month for display
+                monthsReducedByPrepayment = Math.round(tenureBeforePrepayment - tenureAfterPrepayment);
               }
 
               totalInterestPaid += interest;
@@ -477,7 +520,10 @@
               currentBalance = closingBalance;
               
               // Break if balance is effectively zero
-              if (closingBalance < 0.01) break;
+              if (closingBalance < 0.01) {
+                console.log(`WITH-PREPAYMENT Loan completed in month ${iteration}: ${monthKey}`);
+                break;
+              }
               
               currentMonth = (currentMonth + 1) % 12;
               if (currentMonth === 0) currentYear++;
@@ -486,9 +532,53 @@
             // Calculate theoretical tenure using EMI formula (bank's method)
             const startingRoi = sortedRoiPeriods[0]?.roi || 0;
             const startingEmi = sortedEmiPeriods[0]?.emi || 0;
-            const theoreticalTenure = calculateTenure(loanData.startingBalance, startingEmi, startingRoi);
+            const theoreticalTenure = Math.ceil(calculateTenure(loanData.startingBalance, startingEmi, startingRoi));
+
+            // Calculate minimum EMI and check sufficiency
+            // Find the maximum interest paid in any single month (this is the minimum EMI needed)
+            const maxMonthlyInterest = results.length > 0 ? Math.max(...results.map(r => r.interest)) : 0;
+            const minEMIRequired = maxMonthlyInterest > 0 ? Math.ceil(maxMonthlyInterest * 1.01) : 0; // 1% buffer
+            
+            // Simple and accurate check: If the loan completes successfully, EMI is sufficient!
+            // A loan "completes" when:
+            // 1. Balance reaches near zero (< 0.01)
+            // 2. Didn't hit the iteration limit (which would mean infinite loop)
+            // 3. Has a valid schedule with at least one month
+            const hasSchedule = results.length > 0;
+            const balanceCleared = currentBalance < 0.01;
+            const didNotTimeout = iteration < maxIterations;
+            
+            // Additional check: At least 90% of months have positive principal payment
+            const monthsWithPositivePrincipal = results.filter(row => row.emiPrincipal > 0).length;
+            const principalPaymentRatio = hasSchedule ? monthsWithPositivePrincipal / results.length : 0;
+            const mostMonthsPositive = principalPaymentRatio >= 0.9;
+            
+            const isEMISufficient = hasSchedule && balanceCleared && didNotTimeout && mostMonthsPositive;
+            
+            // Debug logging for EMI sufficiency check
+            if (!isEMISufficient && hasSchedule) {
+              console.log('EMI Sufficiency Check Failed:', {
+                hasSchedule,
+                balanceCleared,
+                currentBalance,
+                didNotTimeout,
+                iteration,
+                maxIterations,
+                mostMonthsPositive,
+                principalPaymentRatio,
+                monthsWithPositivePrincipal,
+                totalMonths: results.length
+              });
+            }
 
             // Calculate without prepayment scenario (separate simulation)
+            // This simulates what would happen with same EMI, ROI, and disbursements but NO prepayments
+            console.log('');
+            console.log('STARTING WITHOUT-PREPAYMENT SCENARIO...');
+            console.log('  • Starting Balance:', '₹' + (loanData.startingBalance / 100000).toFixed(2) + 'L');
+            console.log('  • Start Month/Year:', loanData.startMonth, loanData.startYear);
+            console.log('');
+            
             let withoutPrepaymentBalance = loanData.startingBalance;
             let withoutPrepaymentMonths = 0;
             let withoutPrepaymentInterestTotal = 0;
@@ -497,31 +587,215 @@
             // Use separate month/year counters for without-prepayment simulation
             let wpMonth = months.indexOf(loanData.startMonth);
             let wpYear = loanData.startYear;
+            let wpIteration = 0;
 
-            while (withoutPrepaymentBalance > 0.01 && withoutPrepaymentMonths < maxIterationsWithoutPrep) {
-              withoutPrepaymentMonths++;
+            let wpDebugCount = 0;
+            while (withoutPrepaymentBalance > 0.01 && wpIteration < maxIterationsWithoutPrep) {
+              wpIteration++;
+              const monthKey = `${months[wpMonth]}-${wpYear}`;
+              const wpOpeningBalance = withoutPrepaymentBalance;
+              
+              // Debug first few months
+              if (wpDebugCount < 3) {
+                console.log(`  Month ${wpIteration} (${monthKey}): Balance ₹${(wpOpeningBalance / 100000).toFixed(2)}L`);
+                wpDebugCount++;
+              }
+
+              // Get ROI and EMI for this month (same as main calculation)
               const currentRoi = getRoiForMonth(months[wpMonth], wpYear);
-              const monthlyRate = currentRoi / (12 * 100);
-              const interest = Math.round(withoutPrepaymentBalance * monthlyRate);
-              const principal = Math.max(0, startingEmi - interest);
-
-              if (principal <= 0) break; // EMI insufficient
-
-              withoutPrepaymentBalance -= principal;
+              const currentEmi = getEmiForMonth(months[wpMonth], wpYear);
+              
+              // Calculate interest on opening balance (BEFORE disbursements - same as main calculation)
+              let interest = 0;
+              if (loanData.emiStartDate) {
+                const emiDay = new Date(loanData.emiStartDate + 'T00:00:00').getDate();
+                let prevEmiDate;
+                if (wpIteration === 1) {
+                  prevEmiDate = loanData.emiStartDate;
+                } else {
+                  const prevMonth = wpMonth === 0 ? 11 : wpMonth - 1;
+                  const prevYear = wpMonth === 0 ? wpYear - 1 : wpYear;
+                  prevEmiDate = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-${String(emiDay).padStart(2, '0')}`;
+                }
+                const currentEmiDate = `${wpYear}-${String(wpMonth + 1).padStart(2, '0')}-${String(emiDay).padStart(2, '0')}`;
+                const daysBetweenEmis = getDaysBetween(prevEmiDate, currentEmiDate);
+                interest = calculateDailyInterest(wpOpeningBalance, currentRoi, daysBetweenEmis, loanData.dayCountBasis || 'ACT_365');
+              } else {
+                const monthlyRate = currentRoi / (12 * 100);
+                interest = Math.round(wpOpeningBalance * monthlyRate);
+              }
+              
+              // Add disbursements (same as main calculation)
+              const disbursementThisMonth = disbursementMap[monthKey] || 0;
+              const wpBalanceAfterDisbursement = wpOpeningBalance + disbursementThisMonth;
+              
+              // CRITICAL: Ensure NO prepayments are applied here
+              // This is the without-prepayment scenario
+              const checkPrepayment = prepaymentMap[monthKey] || 0;
+              if (checkPrepayment > 0 && wpDebugCount <= 5) {
+                console.log(`  Note: Prepayment of ₹${(checkPrepayment / 100000).toFixed(2)}L scheduled for ${monthKey} (NOT applied in without-prepayment scenario)`);
+              }
+              
+              // Calculate principal payment (no prepayments in this scenario)
+              // MATCH THE EXACT LOGIC FROM MAIN CALCULATION
+              let wpEmiPrincipal;
+              let wpActualEMI;
+              const wpTotalDue = wpBalanceAfterDisbursement + interest;
+              
+              if (wpTotalDue <= currentEmi) {
+                // Last month - pay remaining balance + interest
+                wpActualEMI = wpTotalDue;
+                wpEmiPrincipal = wpBalanceAfterDisbursement;
+                withoutPrepaymentBalance = 0; // Loan complete
+              } else {
+                // Normal month
+                wpActualEMI = currentEmi;
+                wpEmiPrincipal = Math.max(0, currentEmi - interest);
+                
+                // MATCH MAIN CALCULATION: If EMI is insufficient, set principal to 0 but CONTINUE
+                // This matches the behavior in the main loop at line ~452-455
+                if (wpEmiPrincipal <= 0) {
+                  wpEmiPrincipal = 0;
+                  // Don't break - continue to next month where EMI might increase
+                }
+                
+                // Update balance (NO prepayments applied here)
+                withoutPrepaymentBalance = Math.max(0, wpBalanceAfterDisbursement - wpEmiPrincipal);
+              }
+              
               withoutPrepaymentInterestTotal += interest;
+              withoutPrepaymentMonths++;
+              
+              // Debug: Show when we're getting close to completion
+              if (withoutPrepaymentBalance < 100000 && wpDebugCount === 3) {
+                console.log(`  ... (skipping middle months) ...`);
+                console.log(`  Month ${wpIteration} (${monthKey}): Balance ₹${(withoutPrepaymentBalance / 100000).toFixed(2)}L - nearing completion`);
+                wpDebugCount++;
+              }
 
               // Move to next month
               wpMonth = (wpMonth + 1) % 12;
               if (wpMonth === 0) wpYear++;
             }
+            
+            console.log(`WITHOUT-PREPAYMENT Loan completed in ${wpIteration} iterations, final balance: ₹${(withoutPrepaymentBalance / 100000).toFixed(2)}L`);
 
             const withoutPrepaymentTenure = withoutPrepaymentMonths;
             const withoutPrepaymentInterest = withoutPrepaymentInterestTotal;
             
+            // Debug: Log without-prepayment completion
+            console.log('');
+            console.log('WITHOUT-PREPAYMENT SCENARIO COMPLETED:');
+            console.log('  • Total Months:', withoutPrepaymentTenure);
+            console.log('  • Total Interest:', '₹' + (withoutPrepaymentInterest / 100000).toFixed(2) + 'L');
+            console.log('  • Final Balance:', '₹' + (withoutPrepaymentBalance / 100000).toFixed(2) + 'L');
+            console.log('  • Iterations:', wpIteration);
+            console.log('  • Stopped Reason:', withoutPrepaymentBalance <= 0.01 ? 'Balance cleared' : (wpIteration >= maxIterationsWithoutPrep ? 'Max iterations' : 'EMI insufficient'));
+            console.log('');
+            
+            // Debug logging for savings calculation
+            const actualMonthsWithPrepayments = results.length;
+            const actualInterestWithPrepayments = totalInterestPaid;
+            
+            const calculatedMonthsSaved = Math.max(0, withoutPrepaymentTenure - actualMonthsWithPrepayments);
+            const calculatedInterestSaved = Math.max(0, withoutPrepaymentInterest - actualInterestWithPrepayments);
+            
+            // Log raw calculation values
+            console.log('RAW CALCULATION VALUES:');
+            console.log('  actualMonthsWithPrepayments (results.length):', actualMonthsWithPrepayments);
+            console.log('  withoutPrepaymentTenure (withoutPrepaymentMonths):', withoutPrepaymentTenure);
+            console.log('  Difference:', withoutPrepaymentTenure - actualMonthsWithPrepayments);
+            console.log('  actualInterestWithPrepayments:', actualInterestWithPrepayments);
+            console.log('  withoutPrepaymentInterest:', withoutPrepaymentInterest);
+            console.log('  Difference:', withoutPrepaymentInterest - actualInterestWithPrepayments);
+            console.log('');
+            
+            // Validate the comparison makes sense
+            const comparisonMakesSense = withoutPrepaymentTenure >= actualMonthsWithPrepayments && 
+                                        withoutPrepaymentInterest >= actualInterestWithPrepayments;
+            
+            console.log('');
+            console.log('========================================');
+            console.log('SAVINGS CALCULATION DEBUG');
+            console.log('========================================');
+            console.log('');
+            console.log('WITH PREPAYMENTS (Your Actual Loan):');
+            console.log('  • Total Months:', actualMonthsWithPrepayments);
+            console.log('  • Total Interest:', '₹' + (actualInterestWithPrepayments / 100000).toFixed(2) + 'L');
+            console.log('  • Total Principal Paid:', '₹' + (totalPrincipalPaid / 100000).toFixed(2) + 'L');
+            console.log('  • Total Prepayments Made:', '₹' + (totalPrepaymentsMade / 100000).toFixed(2) + 'L', '(' + prepayments.length + ' payments)');
+            console.log('  • Final Balance:', '₹' + (currentBalance / 100000).toFixed(2) + 'L');
+            console.log('');
+            console.log('WITHOUT PREPAYMENTS (Comparison Scenario):');
+            console.log('  • Total Months:', withoutPrepaymentTenure);
+            console.log('  • Total Interest:', '₹' + (withoutPrepaymentInterest / 100000).toFixed(2) + 'L');
+            console.log('  • Final Balance:', '₹' + (withoutPrepaymentBalance / 100000).toFixed(2) + 'L');
+            console.log('');
+            console.log('CALCULATED SAVINGS:');
+            console.log('  • Months Saved:', calculatedMonthsSaved, 'months');
+            console.log('  • Interest Saved:', '₹' + (calculatedInterestSaved / 100000).toFixed(2) + 'L');
+            console.log('  • Comparison Valid:', comparisonMakesSense ? 'YES' : 'NO');
+            console.log('');
+            console.log('========================================');
+            console.log('');
+            
+            // Diagnostic checks
+            if (!comparisonMakesSense) {
+              console.error('');
+              console.error('INVALID COMPARISON DETECTED!');
+              console.error('');
+              console.error('The without-prepayment scenario should ALWAYS have:');
+              console.error('  • MORE months than with-prepayment scenario');
+              console.error('  • MORE interest than with-prepayment scenario');
+              console.error('');
+              console.error('Current situation:');
+              console.error('  • Without months (' + withoutPrepaymentTenure + ') >= With months (' + actualMonthsWithPrepayments + '):', withoutPrepaymentTenure >= actualMonthsWithPrepayments ? 'YES' : 'NO');
+              console.error('  • Without interest (' + (withoutPrepaymentInterest / 100000).toFixed(2) + 'L) >= With interest (' + (actualInterestWithPrepayments / 100000).toFixed(2) + 'L):', withoutPrepaymentInterest >= actualInterestWithPrepayments ? 'YES' : 'NO');
+              console.error('');
+            } else if (calculatedMonthsSaved === 0 && calculatedInterestSaved === 0 && totalPrepaymentsMade > 0) {
+              console.error('');
+              console.error('ERROR: PREPAYMENTS MADE BUT SAVINGS = 0!');
+              console.error('');
+              console.error('Diagnosis:');
+              console.error('  • Prepayments Applied: ₹' + (totalPrepaymentsMade / 100000).toFixed(2) + 'L (' + prepayments.length + ' payments)');
+              console.error('  • With Prepayments Months:', actualMonthsWithPrepayments);
+              console.error('  • Without Prepayments Months:', withoutPrepaymentTenure);
+              console.error('  • Difference:', withoutPrepaymentTenure - actualMonthsWithPrepayments, 'months');
+              console.error('  • With Prepayments Interest: ₹' + (actualInterestWithPrepayments / 100000).toFixed(2) + 'L');
+              console.error('  • Without Prepayments Interest: ₹' + (withoutPrepaymentInterest / 100000).toFixed(2) + 'L');
+              console.error('  • Difference: ₹' + ((withoutPrepaymentInterest - actualInterestWithPrepayments) / 100000).toFixed(2) + 'L');
+              console.error('');
+              if (actualMonthsWithPrepayments === withoutPrepaymentTenure) {
+                console.error('ERROR: BOTH SCENARIOS HAVE IDENTICAL TENURE!');
+                console.error('   This should not happen when prepayments are applied.');
+              }
+              if (actualInterestWithPrepayments === withoutPrepaymentInterest) {
+                console.error('ERROR: BOTH SCENARIOS HAVE IDENTICAL INTEREST!');
+                console.error('   This should not happen when prepayments are applied.');
+              }
+              console.error('');
+            } else if (totalPrepaymentsMade === 0 && prepayments.length > 0) {
+              console.warn('');
+              console.warn('WARNING: PREPAYMENTS ENTERED BUT NOT APPLIED!');
+              console.warn('');
+              console.warn('  • Prepayments Entered:', prepayments.length);
+              console.warn('  • Prepayments Actually Applied: 0');
+              console.warn('');
+              console.warn('Possible Reasons:');
+              console.warn('  1. Prepayment months don\'t match loan schedule months');
+              console.warn('  2. Prepayment dates are outside the loan period');
+              console.warn('  3. Month/year format mismatch');
+              console.warn('');
+              console.warn('Check "Prepayment Map Keys" above and compare with loan schedule months.');
+              console.warn('');
+            } else if (calculatedMonthsSaved > 0 || calculatedInterestSaved > 0) {
+              console.log('SAVINGS CALCULATION SUCCESSFUL!');
+              console.log('  • You are saving', calculatedMonthsSaved, 'months');
+              console.log('  • You are saving ₹' + (calculatedInterestSaved / 100000).toFixed(2) + 'L in interest');
+              console.log('');
+            }
+            
             // Calculate minimum EMI required (using starting ROI)
-            const startingMonthlyRate = startingRoi / (12 * 100);
-            const minEMIRequired = Math.round(loanData.startingBalance * startingMonthlyRate);
-            const isEMISufficient = startingEmi > minEMIRequired;
 
             // Calculate remaining months from current date
             const currentDate = new Date();
@@ -729,7 +1003,7 @@
           };
 
           const resetAllData = () => {
-            if (confirm('⚠️ WARNING: This will reset the CURRENT PROFILE only!\n\nAre you sure you want to reset all data for profile "' + currentProfile + '"?\n\nTip: To delete a profile completely, use the ✕ button next to the profile name.')) {
+            if (confirm('WARNING: This will reset the CURRENT PROFILE only!\n\nAre you sure you want to reset all data for profile "' + currentProfile + '"?\n\nTip: To delete a profile completely, use the X button next to the profile name.')) {
               setLoanData({
                 startingBalance: 0,
                 startMonth: 'Jan',
@@ -952,12 +1226,12 @@
                       className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg"
                       title="Reset all data"
                     >
-                      🔄 Reset
+                      Reset
                     </button>
                   </div>
                   <div className="bg-white bg-opacity-10 backdrop-blur rounded-lg p-3 mt-3">
                     <p className="text-purple-100 text-sm md:text-base">
-                      📊 Plan your EMI • 💰 Track prepayments • ⚡ Variable ROI/EMI support • 🎯 Save thousands in interest
+                      Plan your EMI • Track prepayments • Variable ROI/EMI support • Save thousands in interest
                     </p>
                   </div>
                 </div>
@@ -981,10 +1255,10 @@
                         className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition-all shadow-md hover:shadow-lg"
                         title="Backup"
                       >
-                        💾
+                        Backup
                       </button>
                       <label className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition-all shadow-md hover:shadow-lg cursor-pointer">
-                        📥
+                        Restore
                         <input
                           type="file"
                           accept=".json"
@@ -1064,7 +1338,7 @@
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                       <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
                         <div className="flex justify-between items-center mb-4">
-                          <h3 className="text-2xl font-bold text-gray-800">📤 Share LoanWise</h3>
+                          <h3 className="text-2xl font-bold text-gray-800">Share LoanWise</h3>
                           <button
                             onClick={() => setShowShareModal(false)}
                             className="text-gray-500 hover:text-gray-700 text-3xl font-bold leading-none"
@@ -1078,7 +1352,7 @@
                           {/* WhatsApp */}
                           <button
                             onClick={() => {
-                              const shareText = encodeURIComponent('Check out LoanWise - a FREE loan calculator that helped me plan my EMI and save thousands in interest! 📚💰');
+                              const shareText = encodeURIComponent('Check out LoanWise - a FREE loan calculator that helped me plan my EMI and save thousands in interest!');
                               const shareUrl = encodeURIComponent('https://loanwisely.netlify.app/');
                               window.open(`https://wa.me/?text=${shareText}%20${shareUrl}`, '_blank');
                               setShowShareModal(false);
@@ -1092,7 +1366,7 @@
                           {/* X (Twitter) */}
                           <button
                             onClick={() => {
-                              const shareText = encodeURIComponent('Check out LoanWise - a FREE loan calculator that helped me plan my EMI and save thousands in interest! 📚💰');
+                              const shareText = encodeURIComponent('Check out LoanWise - a FREE loan calculator that helped me plan my EMI and save thousands in interest!');
                               const shareUrl = encodeURIComponent('https://loanwisely.netlify.app/');
                               window.open(`https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`, '_blank');
                               setShowShareModal(false);
@@ -1120,13 +1394,13 @@
                           <button
                             onClick={() => {
                               const subject = encodeURIComponent('Check out LoanWise - Smart Loan Calculator');
-                              const body = encodeURIComponent('Hi!\n\nI wanted to share this amazing FREE loan calculator with you - LoanWise! It helps plan EMI payments and can save thousands in interest.\n\nCheck it out here: https://loanwisely.netlify.app/\n\n📚💰 It\'s completely free and your data stays private in your browser!');
+                              const body = encodeURIComponent('Hi!\n\nI wanted to share this amazing FREE loan calculator with you - LoanWise! It helps plan EMI payments and can save thousands in interest.\n\nCheck it out here: https://loanwisely.netlify.app/\n\nIt\'s completely free and your data stays private in your browser!');
                               window.location.href = `mailto:?subject=${subject}&body=${body}`;
                               setShowShareModal(false);
                             }}
                             className="w-full bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg"
                           >
-                            <span className="text-2xl">✉️</span>
+                            <span className="text-2xl">Email</span>
                             <span>Share via Email</span>
                           </button>
 
@@ -1158,7 +1432,7 @@
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                       <div className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-4">
-                          <h3 className="text-2xl font-bold">🔍 Calculation Details - Profile: {currentProfile}</h3>
+                          <h3 className="text-2xl font-bold">Calculation Details - Profile: {currentProfile}</h3>
                           <button
                             onClick={() => setShowDebugModal(false)}
                             className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
@@ -1170,14 +1444,14 @@
                         <div className="space-y-4">
                           {/* Loan Details */}
                           <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
-                            <h4 className="font-bold text-purple-800 mb-2">📋 Basic Loan Details</h4>
+                            <h4 className="font-bold text-purple-800 mb-2">Basic Loan Details</h4>
                             <div className="grid grid-cols-2 gap-2 text-sm mb-3">
                               <div><span className="font-semibold">Starting Balance:</span> ₹{loanData.startingBalance.toLocaleString('en-IN')}</div>
                               <div><span className="font-semibold">Start Date:</span> {loanData.startMonth} {loanData.startYear}</div>
                             </div>
                             {disbursements.length > 0 && (
                               <div className="text-sm mt-2">
-                                <div className="font-semibold text-purple-700 mb-2">💰 Disbursements Breakdown:</div>
+                                <div className="font-semibold text-purple-700 mb-2">Disbursements Breakdown:</div>
                                 <div className="space-y-1 max-h-40 overflow-y-auto">
                                   {disbursements.map((disb, idx) => (
                                     <div key={idx} className="bg-white p-1.5 rounded text-xs">
@@ -1194,7 +1468,7 @@
 
                           {/* ROI Periods */}
                           <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
-                            <h4 className="font-bold text-yellow-800 mb-2">💰 ROI Periods ({roiPeriods.length})</h4>
+                            <h4 className="font-bold text-yellow-800 mb-2">ROI Periods ({roiPeriods.length})</h4>
                             <div className="space-y-1 text-sm">
                               {roiPeriods.map((roi, idx) => (
                                 <div key={idx} className="bg-white p-2 rounded">
@@ -1206,7 +1480,7 @@
 
                           {/* EMI Periods */}
                           <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-                            <h4 className="font-bold text-green-800 mb-2">💵 EMI Periods ({emiPeriods.length})</h4>
+                            <h4 className="font-bold text-green-800 mb-2">EMI Periods ({emiPeriods.length})</h4>
                             <div className="space-y-1 text-sm">
                               {emiPeriods.map((emi, idx) => (
                                 <div key={idx} className="bg-white p-2 rounded">
@@ -1218,7 +1492,7 @@
 
                           {/* Disbursements */}
                           <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-                            <h4 className="font-bold text-green-800 mb-2">💰 Disbursements ({disbursements.length})</h4>
+                            <h4 className="font-bold text-green-800 mb-2">Disbursements ({disbursements.length})</h4>
                             <div className="space-y-1 text-sm">
                               {disbursements.map((disb, idx) => {
                                 const date = new Date(disb.date);
@@ -1241,7 +1515,7 @@
 
                           {/* Prepayments */}
                           <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                            <h4 className="font-bold text-blue-800 mb-2">🎯 Prepayments ({prepayments.length})</h4>
+                            <h4 className="font-bold text-blue-800 mb-2">Prepayments ({prepayments.length})</h4>
                             {prepayments.length > 0 ? (
                               <div className="space-y-1 text-sm max-h-60 overflow-y-auto">
                                 {prepayments.map((prep, idx) => (
@@ -1260,7 +1534,7 @@
 
                           {/* Calculation Results */}
                           <div className="bg-indigo-50 border-2 border-indigo-200 rounded-lg p-4">
-                            <h4 className="font-bold text-indigo-800 mb-2">📊 Calculation Results</h4>
+                            <h4 className="font-bold text-indigo-800 mb-2">Calculation Results</h4>
                             <div className="space-y-2 text-sm">
                               <div className="bg-white p-2 rounded">
                                 <span className="font-semibold">Remaining Months:</span> {projectionData.summary.remainingMonths} months ({Math.floor(projectionData.summary.remainingMonths / 12)} years {projectionData.summary.remainingMonths % 12} months)
@@ -1288,7 +1562,7 @@
 
                           {/* Export Raw Data */}
                           <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-4">
-                            <h4 className="font-bold text-gray-800 mb-2">📤 Export Raw Data</h4>
+                            <h4 className="font-bold text-gray-800 mb-2">Export Raw Data</h4>
                             <p className="text-sm text-gray-600 mb-3">Copy this data to share or analyze:</p>
                             <textarea
                               className="w-full p-3 border-2 border-gray-300 rounded font-mono text-xs"
@@ -1335,7 +1609,7 @@
                         <div className="space-y-4">
                           {/* Current localStorage Data */}
                           <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                            <h4 className="font-bold text-blue-800 mb-2">💾 Current Browser Storage (localStorage)</h4>
+                            <h4 className="font-bold text-blue-800 mb-2">Current Browser Storage (localStorage)</h4>
                             <p className="text-sm text-gray-700 mb-3">This is what's currently saved in your browser:</p>
                             <textarea
                               className="w-full p-3 border-2 border-gray-300 rounded font-mono text-xs"
@@ -1347,16 +1621,16 @@
                               }, null, 2)}
                               onClick={(e) => e.target.select()}
                             />
-                            <p className="text-xs text-gray-600 mt-2">💡 You can copy this data and save it as a backup file (.json)</p>
+                            <p className="text-xs text-gray-600 mt-2">You can copy this data and save it as a backup file (.json)</p>
                           </div>
 
                           {/* Recovery Instructions */}
                           <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
-                            <h4 className="font-bold text-yellow-800 mb-2">⚠️ Data Recovery Options</h4>
+                            <h4 className="font-bold text-yellow-800 mb-2">Data Recovery Options</h4>
                             <div className="text-sm text-gray-700 space-y-2">
                               <p><strong>If you just lost data:</strong></p>
                               <ol className="list-decimal ml-5 space-y-1">
-                                <li><strong>Check if you have a backup file:</strong> If you clicked "💾 Backup" before, restore it using "📥 Restore" button</li>
+                                <li><strong>Check if you have a backup file:</strong> If you clicked "Backup" before, restore it using "Restore" button</li>
                                 <li><strong>Browser history:</strong> Try pressing Ctrl+Shift+H (or Cmd+Shift+H on Mac) and check if you have the page open in another tab</li>
                                 <li><strong>Don't close the browser:</strong> If you have multiple windows/tabs open, one might still have the old data</li>
                                 <li><strong>Check browser console:</strong> Press F12, go to "Application" tab → "Local Storage" → check if old data exists</li>
@@ -1364,45 +1638,45 @@
                               
                               <p className="mt-3"><strong>Prevention for future:</strong></p>
                               <ul className="list-disc ml-5 space-y-1">
-                                <li>Click "💾 Backup" button regularly to download a backup file</li>
+                                <li>Click "Backup" button regularly to download a backup file</li>
                                 <li>Keep backup files in a safe location (Google Drive, Dropbox, etc.)</li>
-                                <li>Use "📥 Restore" to recover from backup files</li>
+                                <li>Use "Restore" to recover from backup files</li>
                               </ul>
                             </div>
                           </div>
 
                           {/* Quick Actions */}
                           <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-                            <h4 className="font-bold text-green-800 mb-2">🚀 Quick Actions</h4>
+                            <h4 className="font-bold text-green-800 mb-2">Quick Actions</h4>
                             <div className="space-y-2">
                               <button
                                 onClick={() => {
                                   const data = localStorage.getItem('loanProfiles');
                                   if (data) {
                                     navigator.clipboard.writeText(data);
-                                    alert('✅ Current data copied to clipboard! Save it in a text file as backup.');
+                                    alert('Current data copied to clipboard! Save it in a text file as backup.');
                                   }
                                 }}
                                 className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold"
                               >
-                                📋 Copy Current Data to Clipboard
+                                Copy Current Data to Clipboard
                               </button>
                               
                               <button
                                 onClick={() => {
                                   exportAllProfiles();
-                                  alert('✅ Backup file downloaded! Keep it safe for future recovery.');
+                                    alert('Backup file downloaded! Keep it safe for future recovery.');
                                 }}
                                 className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold"
                               >
-                                💾 Download Backup Now
+                                Download Backup Now
                               </button>
                             </div>
                           </div>
 
                           {/* Manual Recovery */}
                           <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
-                            <h4 className="font-bold text-red-800 mb-2">⚡ Manual Recovery (Advanced)</h4>
+                            <h4 className="font-bold text-red-800 mb-2">Manual Recovery (Advanced)</h4>
                             <p className="text-sm text-gray-700 mb-3">If you have backup data from another source, paste it here:</p>
                             <textarea
                               id="manualRecoveryData"
@@ -1420,12 +1694,12 @@
                                     window.location.reload();
                                   }
                                 } catch (error) {
-                                  alert('❌ Invalid JSON data: ' + error.message);
+                                    alert('Invalid JSON data: ' + error.message);
                                 }
                               }}
                               className="mt-2 w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold"
                             >
-                              🔄 Restore from Pasted Data
+                              Restore from Pasted Data
                             </button>
                           </div>
                         </div>
@@ -1444,7 +1718,7 @@
                 {/* Quick Summary - Compact with Better Colors */}
                 <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl shadow-lg p-4 mb-6">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-base font-bold text-white">📊 Summary</h3>
+                    <h3 className="text-base font-bold text-white">Summary</h3>
                     {projectionData?.schedule?.length > 0 && (
                       <span className="text-xs text-gray-300 font-semibold">
                         Duration: {Math.floor(projectionData.schedule.length / 12)}y {projectionData.schedule.length % 12}m
@@ -1455,32 +1729,32 @@
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {/* Principal */}
                     <div className="bg-blue-500 bg-opacity-90 rounded-lg p-3 text-white">
-                      <p className="text-xs opacity-90 mb-1">💼 Principal</p>
-                      <p className="text-lg font-bold">₹{((loanData?.startingBalance || 0) / 100000).toFixed(2)}L</p>
+                      <p className="text-xs opacity-90 mb-1">Principal</p>
+                      <p className="text-lg font-bold">₹{(((loanData?.startingBalance || 0) + (projectionData?.summary?.totalDisbursementsMade || 0)) / 100000).toFixed(2)}L</p>
                     </div>
 
                     {/* Interest */}
                     <div className="bg-orange-500 bg-opacity-90 rounded-lg p-3 text-white">
-                      <p className="text-xs opacity-90 mb-1">📈 Interest</p>
+                      <p className="text-xs opacity-90 mb-1">Interest</p>
                       <p className="text-lg font-bold">₹{((projectionData?.summary?.totalInterestPaid || 0) / 100000).toFixed(2)}L</p>
                     </div>
 
                     {/* Total Payable */}
                     <div className="bg-indigo-600 bg-opacity-90 rounded-lg p-3 text-white">
-                      <p className="text-xs opacity-90 mb-1">💰 Total</p>
-                      <p className="text-lg font-bold">₹{(((loanData?.startingBalance || 0) + (projectionData?.summary?.totalInterestPaid || 0)) / 100000).toFixed(2)}L</p>
+                      <p className="text-xs opacity-90 mb-1">Total</p>
+                      <p className="text-lg font-bold">₹{((projectionData?.summary?.totalAmountPaid || 0) / 100000).toFixed(2)}L</p>
                     </div>
 
                     {/* Saved */}
                     <div className="bg-green-600 bg-opacity-90 rounded-lg p-3 text-white">
-                      <p className="text-xs opacity-90 mb-1">✨ Saved</p>
+                      <p className="text-xs opacity-90 mb-1">Saved</p>
                       <p className="text-lg font-bold">₹{((projectionData?.summary?.interestSaved || 0) / 100000).toFixed(2)}L</p>
                     </div>
                   </div>
                 </div>
 
                 <div className="bg-white rounded-xl shadow-lg p-4 md:p-6 mb-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4">📝 Loan Inputs</h2>
+                  <h2 className="text-xl font-bold text-gray-800 mb-4">Loan Inputs</h2>
                   
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {/* Left Column - Basic + ROI */}
@@ -1743,12 +2017,41 @@
                   <div className="bg-red-500 rounded-xl shadow-lg p-5 mb-6 text-white border-2 border-red-400">
                     <div className="flex items-center gap-2 mb-3">
                       <TrendingDown />
-                      <h3 className="text-lg font-bold">⚠️ EMI Too Low</h3>
+                      <h3 className="text-lg font-bold">EMI Insufficient</h3>
                     </div>
-                    <p className="text-sm mb-2">Your EMI won't cover monthly interest. Loan balance will not decrease.</p>
+                    <p className="text-sm mb-2">The loan calculation indicates the EMI may not be sufficient to fully repay the loan within a reasonable timeframe.</p>
                     <div className="bg-white bg-opacity-20 rounded-lg p-3 text-sm">
-                      <p><strong>Minimum EMI:</strong> ₹{projectionData.summary.minEMIRequired.toLocaleString('en-IN')}</p>
-                      <p className="text-xs opacity-90 mt-1">Increase EMI or add prepayments</p>
+                      <p><strong>Minimum EMI Suggested:</strong> ₹{projectionData.summary.minEMIRequired.toLocaleString('en-IN')}</p>
+                      <p className="text-xs opacity-90 mt-1">Based on maximum monthly interest: ₹{Math.round(projectionData.summary.minEMIRequired / 1.01).toLocaleString('en-IN')}</p>
+                      <p className="text-xs opacity-90 mt-2"><strong>If your current EMI is higher than this minimum:</strong></p>
+                      <ul className="text-xs opacity-90 mt-1 ml-4 list-disc">
+                        <li>Check your ROI and EMI change dates are correct</li>
+                        <li>Verify disbursement dates and amounts</li>
+                        <li>This warning may be due to very large disbursements</li>
+                        <li>Open browser console (F12) for detailed debug info</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+                
+                {projectionData.summary.totalPrepaymentsMade > 0 && projectionData.summary.interestSaved === 0 && (
+                  <div className="bg-orange-500 rounded-xl shadow-lg p-5 mb-6 text-white border-2 border-orange-400">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertCircle />
+                      <h3 className="text-lg font-bold">Savings Calculation Issue</h3>
+                    </div>
+                    <p className="text-sm mb-2">You've made ₹{(projectionData.summary.totalPrepaymentsMade / 100000).toFixed(2)}L in prepayments, but savings show as ₹0.00L. This needs investigation.</p>
+                    <div className="bg-white bg-opacity-20 rounded-lg p-3 text-sm">
+                      <p><strong>Debug Steps:</strong></p>
+                      <ol className="text-xs opacity-90 mt-2 ml-4 list-decimal space-y-1">
+                        <li>Press <strong>F12</strong> to open browser console</li>
+                        <li>Look for the section "SAVINGS CALCULATION DEBUG"</li>
+                        <li>Check if "Without Prepayments" shows higher months/interest than "With Prepayments"</li>
+                        <li>Share console output if issue persists</li>
+                      </ol>
+                      <p className="text-xs mt-2 opacity-90">
+                        <strong>Common cause:</strong> Prepayment dates might not match your loan schedule months.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -1758,13 +2061,13 @@
                     <div className="flex justify-between items-center mb-4">
                       <div className="flex items-center gap-2">
                         <PieChart />
-                        <h3 className="text-lg font-bold">📊 Loan Overview ({currentProfile})</h3>
+                        <h3 className="text-lg font-bold">Loan Overview ({currentProfile})</h3>
                         </div>
                         <button
                         onClick={() => setShowDebugModal(true)}
                         className="bg-white text-blue-600 px-3 py-1.5 rounded-lg font-semibold text-xs hover:bg-opacity-90 transition-colors"
                         >
-                        🔍 Details
+                        Details
                         </button>
                       </div>
                     
@@ -1801,7 +2104,7 @@
                   <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg p-5 mb-6 text-white">
                     <div className="flex items-center gap-2 mb-4">
                       <Zap />
-                      <h3 className="text-lg font-bold">🔥 Progress Tracker</h3>
+                      <h3 className="text-lg font-bold">Progress Tracker</h3>
                 </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -1822,7 +2125,7 @@
                         {motivationStats.crossoverMonth ? (
                           <>
                             <div className="text-2xl font-bold">{motivationStats.crossoverMonth.month}</div>
-                            <p className="text-xs opacity-90 mt-1">🎉 Principal beats interest!</p>
+                            <p className="text-xs opacity-90 mt-1">Principal beats interest!</p>
                           </>
                         ) : (
                           <p className="text-sm opacity-90">Add prepayments to reach faster</p>
@@ -1942,10 +2245,10 @@
                       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6">
                         <div className="flex justify-between items-center flex-wrap gap-3">
                     <div>
-                            <h2 className="text-2xl font-bold text-white">📅 Payment Schedule</h2>
+                            <h2 className="text-2xl font-bold text-white">Payment Schedule</h2>
                       <p className="text-sm text-indigo-100 mt-1">
                               {Math.floor(projectionData.summary.remainingMonths / 12)}y {projectionData.summary.remainingMonths % 12}m •
-                              Final: {projectionData.summary.lastEMIMonth} • 📍 Current: {new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                              Final: {projectionData.summary.lastEMIMonth} • Current: {new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
                     </p>
                   </div>
                     {projectionData.schedule.length > 13 && (
@@ -1953,7 +2256,7 @@
                         onClick={() => setShowAllRows(!showAllRows)}
                               className="bg-white text-indigo-600 px-4 py-2 rounded-lg font-semibold hover:bg-indigo-50 text-sm"
                       >
-                              {showAllRows ? `📍 Current Month` : `📋 All ${projectionData.summary.remainingMonths} for remaining`}
+                              {showAllRows ? `Current Month` : `All ${projectionData.summary.remainingMonths} for remaining`}
                       </button>
                     )}
                 </div>
@@ -1977,7 +2280,7 @@
                             P/I Ratio
                           </th>
                           <th className="px-4 py-3 text-right bg-yellow-100" title="Months saved by prepayment">
-                            <span className="font-bold text-yellow-800">💰 Months Saved</span>
+                            <span className="font-bold text-yellow-800">Months Saved</span>
                           </th>
                         </tr>
                       </thead>
@@ -2109,14 +2412,14 @@
                   <div className="bg-white rounded-xl shadow-lg p-5">
                     <div className="flex items-center gap-2 mb-3">
                       <Calendar />
-                      <h3 className="text-lg font-bold text-gray-800">📋 Key Dates</h3>
+                      <h3 className="text-lg font-bold text-gray-800">Key Dates</h3>
                     </div>
                     
                     <div className="space-y-4">
                       {/* ROI Changes */}
                       {roiPeriods.length > 1 && (
                         <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
-                          <h4 className="font-bold text-yellow-800 mb-2">💰 Interest Rate Changes:</h4>
+                          <h4 className="font-bold text-yellow-800 mb-2">Interest Rate Changes:</h4>
                           <div className="space-y-1">
                             {roiPeriods.map((roi, idx) => (
                               <div key={idx} className="text-sm text-gray-700">
@@ -2131,7 +2434,7 @@
                       {/* EMI Changes */}
                       {emiPeriods.length > 1 && (
                         <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded">
-                          <h4 className="font-bold text-green-800 mb-2">💵 EMI Changes:</h4>
+                          <h4 className="font-bold text-green-800 mb-2">EMI Changes:</h4>
                           <div className="space-y-1">
                             {emiPeriods.map((emi, idx) => (
                               <div key={idx} className="text-sm text-gray-700">
@@ -2146,7 +2449,7 @@
                       {/* Prepayment Schedule */}
                       {prepayments.length > 0 && (
                         <div className="bg-purple-50 border-l-4 border-purple-500 p-4 rounded">
-                          <h4 className="font-bold text-purple-800 mb-2">🎯 Scheduled Prepayments:</h4>
+                          <h4 className="font-bold text-purple-800 mb-2">Scheduled Prepayments:</h4>
                           <div className="space-y-1 max-h-32 overflow-y-auto">
                             {prepayments.slice(0, 10).map((prep, idx) => (
                               <div key={idx} className="text-sm text-gray-700">
@@ -2162,7 +2465,7 @@
                       
                       {/* Loan End Date */}
                       <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-                        <h4 className="font-bold text-blue-800 mb-2">🎉 Loan Completion:</h4>
+                        <h4 className="font-bold text-blue-800 mb-2">Loan Completion:</h4>
                         <div className="text-sm text-gray-700">
                           <p className="font-semibold text-lg">{projectionData.summary.lastEMIMonth}</p>
                           <p className="text-xs text-blue-600 mt-1">Remaining: {projectionData.summary.remainingMonths} months ({Math.floor(projectionData.summary.remainingMonths / 12)} years {projectionData.summary.remainingMonths % 12} months)</p>
@@ -2176,19 +2479,35 @@
                   <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl shadow-lg p-5">
                     <div className="flex items-center gap-2 mb-3">
                       <Award />
-                      <h3 className="text-lg font-bold text-gray-800">💡 Smart Tips</h3>
+                      <h3 className="text-lg font-bold text-gray-800">Smart Tips</h3>
                     </div>
                     
                     <div className="space-y-3">
-                      <div className="bg-white p-4 rounded-lg shadow-sm">
-                        <h4 className="font-bold text-indigo-700 mb-2">📊 Your Savings</h4>
-                        <p className="text-sm text-gray-700">
-                          By making prepayments, you'll save <strong className="text-green-600">₹{(projectionData.summary.interestSaved / 100000).toFixed(2)}L</strong> in interest and finish <strong className="text-blue-600">{projectionData.summary.monthsSaved} months</strong> earlier!
-                        </p>
+                      <div className={`p-4 rounded-lg shadow-sm ${projectionData.summary.interestSaved > 0 ? 'bg-white' : 'bg-red-50 border-2 border-red-300'}`}>
+                        <h4 className={`font-bold mb-2 ${projectionData.summary.interestSaved > 0 ? 'text-indigo-700' : 'text-red-700'}`}>
+                          {projectionData.summary.interestSaved > 0 ? 'Your Savings' : 'No Savings Calculated'}
+                        </h4>
+                        {projectionData.summary.interestSaved > 0 ? (
+                          <p className="text-sm text-gray-700">
+                            By making prepayments, you'll save <strong className="text-green-600">₹{(projectionData.summary.interestSaved / 100000).toFixed(2)}L</strong> in interest and finish <strong className="text-blue-600">{projectionData.summary.monthsSaved} months</strong> earlier!
+                          </p>
+                        ) : (
+                          <div className="text-sm">
+                            <p className="text-gray-700 mb-2">Savings show as ₹0.00L. Possible reasons:</p>
+                            <ul className="list-disc ml-5 space-y-1 text-xs text-gray-600">
+                              <li>No prepayments entered</li>
+                              <li>Prepayment dates don't match loan schedule</li>
+                              <li>Calculation issue</li>
+                            </ul>
+                            <p className="mt-3 text-xs bg-yellow-100 border border-yellow-300 rounded p-2 text-gray-800">
+                              <strong>Debug:</strong> Press F12 to open console, look for "SAVINGS CALCULATION DEBUG"
+                            </p>
+                          </div>
+                        )}
                       </div>
                       
                       <div className="bg-white p-4 rounded-lg shadow-sm">
-                        <h4 className="font-bold text-purple-700 mb-2">🎯 Best Strategy</h4>
+                        <h4 className="font-bold text-purple-700 mb-2">Best Strategy</h4>
                         <p className="text-sm text-gray-700">
                           • Prepay when ROI is <strong>highest</strong><br/>
                           • Earlier prepayments save <strong>more</strong><br/>
@@ -2197,14 +2516,14 @@
                       </div>
                       
                       <div className="bg-white p-4 rounded-lg shadow-sm">
-                        <h4 className="font-bold text-orange-700 mb-2">📈 Progress Tracking</h4>
+                        <h4 className="font-bold text-orange-700 mb-2">Progress Tracking</h4>
                         <p className="text-sm text-gray-700">
                           Principal-to-Interest ratio improving means you're paying more towards principal and less towards interest with each payment.
                         </p>
                       </div>
                       
                       <div className="bg-white p-4 rounded-lg shadow-sm">
-                        <h4 className="font-bold text-green-700 mb-2">💾 Auto-Save</h4>
+                        <h4 className="font-bold text-green-700 mb-2">Auto-Save</h4>
                         <p className="text-sm text-gray-700">
                           All your data is automatically saved. Create multiple profiles to compare different scenarios!
                         </p>
@@ -2379,7 +2698,7 @@
                       
                       <div className="mt-4 text-sm bg-emerald-700 bg-opacity-30 rounded-lg p-3">
                         <p className="flex items-center gap-2">
-                          <span className="text-yellow-300">💡</span>
+                          <span className="text-yellow-300">Tip:</span>
                           <span>
                             {isActualCurrent 
                               ? `Showing your actual current month (${currentMonth} ${currentYear}) with 5 months before and after for context.`
@@ -2421,7 +2740,7 @@
                 <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-xl shadow-lg p-5 mb-6 text-white">
                   <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                     <div className="text-center md:text-left">
-                      <h3 className="text-lg font-bold mb-1">💜 Enjoying LoanWise?</h3>
+                      <h3 className="text-lg font-bold mb-1">💜Enjoying LoanWise?</h3>
                       <p className="text-sm opacity-90">100% FREE • No Ads • Support if you found value!</p>
                     </div>
                     
@@ -2432,7 +2751,7 @@
                         rel="noopener noreferrer"
                         className="bg-yellow-500 hover:bg-yellow-400 text-gray-900 px-4 py-2 rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg flex items-center gap-1.5"
                       >
-                        <span>☕</span>
+                        <span>Support</span>
                         <span>Support</span>
                       </a>
                       
@@ -2440,7 +2759,7 @@
                         onClick={() => setShowShareModal(true)}
                         className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg flex items-center gap-1.5"
                       >
-                        <span>📤</span>
+                        <span>Share</span>
                         <span>Share</span>
                       </button>
                       
@@ -2448,7 +2767,7 @@
                         href="mailto:didyouknowmyemail@gmail.com?subject=LoanWise - Feedback"
                         className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg flex items-center gap-1.5"
                       >
-                        <span>✉️</span>
+                        <span>Feedback</span>
                         <span>Feedback</span>
                       </a>
                     </div>
@@ -2463,7 +2782,7 @@
                     </div>
                   </div>
                   <p className="text-lg">
-                    <span className="text-purple-400 font-bold">📚 LoanWise</span>
+                    <span className="text-purple-400 font-bold">LoanWise</span>
                   </p>
                   <p className="text-yellow-500 font-semibold text-sm">Make Smarter Loan Decisions</p>
                   <p>© {new Date().getFullYear()} - Free Loan Planning Tool by LoanWise</p>
@@ -2471,9 +2790,9 @@
                     Plan your EMI • Track Prepayments • Variable ROI Support • Save Thousands in Interest
                   </p>
                   <div className="flex justify-center gap-4 text-xs mt-4">
-                    <a href="https://buymeacoffee.com/snickers9" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 transition-colors">☕ Support</a>
+                    <a href="https://buymeacoffee.com/snickers9" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 transition-colors">Support</a>
                     <span className="text-gray-600">|</span>
-                    <a href="mailto:didyouknowmyemail@gmail.com" className="text-purple-400 hover:text-purple-300 transition-colors">✉️ Contact</a>
+                    <a href="mailto:didyouknowmyemail@gmail.com" className="text-purple-400 hover:text-purple-300 transition-colors">Contact</a>
                   </div>
                 </div>
 
