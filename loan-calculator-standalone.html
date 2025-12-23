@@ -481,6 +481,18 @@
 
               const closingBalance = Math.max(0, balanceAfterEMI - actualPrepayment);
               
+              // ENHANCED DEBUG: Log every month's calculation for verification
+              if (iteration <= 5 || prepaymentThisMonth > 0) {
+                console.log(`Month ${iteration} (${monthKey}):`, {
+                  openingBalance: '₹' + (openingBalance / 100000).toFixed(2) + 'L',
+                  interest: '₹' + (interest / 1000).toFixed(1) + 'k',
+                  emiPrincipal: '₹' + (emiPrincipal / 1000).toFixed(1) + 'k',
+                  balanceAfterEMI: '₹' + (balanceAfterEMI / 100000).toFixed(2) + 'L',
+                  prepayment: '₹' + (actualPrepayment / 100000).toFixed(2) + 'L',
+                  closingBalance: '₹' + (closingBalance / 100000).toFixed(2) + 'L'
+                });
+              }
+              
               // Debug: Log when prepayment is applied
               if (prepaymentThisMonth > 0) {
                 console.log(`Prepayment Applied in ${monthKey}:`, {
@@ -496,8 +508,21 @@
               if (actualPrepayment > 0) {
                 const tenureBeforePrepayment = calculateTenure(balanceAfterEMI, currentEmi, currentRoi);
                 const tenureAfterPrepayment = calculateTenure(closingBalance, currentEmi, currentRoi);
-                // Round to nearest whole month for display
-                monthsReducedByPrepayment = Math.round(tenureBeforePrepayment - tenureAfterPrepayment);
+                const exactReduction = tenureBeforePrepayment - tenureAfterPrepayment;
+                monthsReducedByPrepayment = Math.round(exactReduction);
+                
+                // ENHANCED DEBUG: Log months saved calculation details
+                console.log(`Months Saved Calculation for ${monthKey}:`, {
+                  balanceBeforePrepayment: '₹' + (balanceAfterEMI / 100000).toFixed(2) + 'L',
+                  balanceAfterPrepayment: '₹' + (closingBalance / 100000).toFixed(2) + 'L',
+                  prepaymentAmount: '₹' + (actualPrepayment / 100000).toFixed(2) + 'L',
+                  currentEMI: '₹' + (currentEmi / 1000).toFixed(0) + 'k',
+                  currentROI: currentRoi + '%',
+                  tenureBeforePrepayment: tenureBeforePrepayment.toFixed(2) + ' months',
+                  tenureAfterPrepayment: tenureAfterPrepayment.toFixed(2) + ' months',
+                  exactReduction: exactReduction.toFixed(2) + ' months',
+                  monthsReduced: monthsReducedByPrepayment + ' months (rounded)'
+                });
               }
 
               totalInterestPaid += interest;
