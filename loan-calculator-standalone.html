@@ -300,14 +300,17 @@
             };
 
             // Function to get EMI for a specific month/year
+            // IMPORTANT: Returns 0 for months BEFORE the first defined EMI period
+            // (e.g., during pre-EMI/moratorium period while disbursements are still happening).
             const getEmiForMonth = (month, year) => {
               const monthKey = `${month}-${year}`;
               if (emiMap[monthKey] !== undefined) {
                 return emiMap[monthKey];
               }
               
-              // Find the applicable EMI (most recent EMI period before or at this month)
-              let applicableEmi = sortedEmiPeriods[0]?.emi || 0;
+              // Find the most recent EMI period whose month/year <= current month/year.
+              // If none found, the month is BEFORE the first EMI period -> EMI is 0.
+              let applicableEmi = 0;
               for (const period of sortedEmiPeriods) {
                 const periodMonthIdx = months.indexOf(period.month);
                 const currentMonthIdx = months.indexOf(month);
@@ -396,6 +399,47 @@
               return Math.round(principal * dailyRate * days);
             };
 
+            // Pre-parse disbursement list once (sorted by date) for the period-interest helper.
+            const parsedDisbursements = (disbursements || [])
+              .map(d => ({ dateObj: new Date(d.date + 'T00:00:00'), amount: d.amount, raw: d }))
+              .filter(d => !isNaN(d.dateObj.getTime()))
+              .sort((a, b) => a.dateObj - b.dateObj);
+
+            // Calculate interest accrued over an EMI cycle [prevEmiDate, currentEmiDate]
+            // correctly accounting for disbursements that happened mid-cycle.
+            // Returns { interest, disbursedInPeriod, balanceAtEnd }.
+            const computePeriodInterest = (prevEmiDate, currentEmiDate, balanceAtStart, annualRate, dayCountBasis) => {
+              if (!prevEmiDate || !currentEmiDate) {
+                return { interest: 0, disbursedInPeriod: 0, balanceAtEnd: balanceAtStart };
+              }
+              const start = new Date(prevEmiDate + 'T00:00:00');
+              const end = new Date(currentEmiDate + 'T00:00:00');
+              if (end <= start) {
+                return { interest: 0, disbursedInPeriod: 0, balanceAtEnd: balanceAtStart };
+              }
+              // Disbursements strictly after prevEmiDate and on/before currentEmiDate
+              // accrue interest only from their disbursement date onward.
+              const inPeriod = parsedDisbursements.filter(d => d.dateObj > start && d.dateObj <= end);
+              let balance = balanceAtStart;
+              let interest = 0;
+              let cursor = start;
+              let disbursed = 0;
+              for (const d of inPeriod) {
+                const days = Math.round((d.dateObj - cursor) / 86400000);
+                if (days > 0) {
+                  interest += calculateDailyInterest(balance, annualRate, days, dayCountBasis);
+                }
+                balance += d.amount;
+                disbursed += d.amount;
+                cursor = d.dateObj;
+              }
+              const finalDays = Math.round((end - cursor) / 86400000);
+              if (finalDays > 0) {
+                interest += calculateDailyInterest(balance, annualRate, finalDays, dayCountBasis);
+              }
+              return { interest, disbursedInPeriod: disbursed, balanceAtEnd: balance };
+            };
+
             // Debug: Log calculation start
             if (prepayments.length > 0) {
               console.log('');
@@ -407,6 +451,12 @@
               console.log('');
             }
             
+            // Track the balance AT the previous EMI date (snapshot at EMI cycle boundaries).
+            // This is different from the calendar-month closing balance when disbursements
+            // happen after the EMI day within a calendar month (e.g., EMI on the 10th,
+            // disbursement on the 22nd — the disbursement belongs to the NEXT EMI cycle).
+            let balanceAtPrevEmi = initialPrincipal;
+
             while ((currentBalance > 0.01 || hasPendingDisbursements(currentMonth, currentYear)) && iteration < maxIterations) {
               iteration++;
               const monthKey = `${months[currentMonth]}-${currentYear}`;
@@ -416,36 +466,42 @@
               const currentRoi = getRoiForMonth(months[currentMonth], currentYear);
               const currentEmi = getEmiForMonth(months[currentMonth], currentYear);
 
-              // Calculate daily interest accrual on opening balance (before disbursements)
+              // Calculate daily interest accrual for the EMI cycle ending in this month,
+              // correctly accounting for any disbursements that land mid-cycle.
               let interest = 0;
+              let disbursementInEmiPeriod = 0;
               if (loanData.emiStartDate) {
-                // Calculate interest for the period between EMI dates
                 const emiDay = new Date(loanData.emiStartDate + 'T00:00:00').getDate();
 
-                // Calculate the previous EMI date
+                // Previous EMI date (the cycle start)
                 let prevEmiDate;
                 if (iteration === 1) {
                   prevEmiDate = loanData.emiStartDate;
                 } else {
-                  // For subsequent iterations, previous EMI was last month on the same day
                   const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
                   const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
                   prevEmiDate = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-${String(emiDay).padStart(2, '0')}`;
                 }
 
-                // Current EMI date for this month
+                // Current EMI date (the cycle end)
                 const currentEmiDate = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(emiDay).padStart(2, '0')}`;
-                const daysBetweenEmis = getDaysBetween(prevEmiDate, currentEmiDate);
 
-                // Calculate interest on the entire opening balance for the days between EMIs
-                interest = calculateDailyInterest(openingBalance, currentRoi, daysBetweenEmis, loanData.dayCountBasis || 'ACT_365');
+                const periodResult = computePeriodInterest(
+                  prevEmiDate,
+                  currentEmiDate,
+                  balanceAtPrevEmi,
+                  currentRoi,
+                  loanData.dayCountBasis || 'ACT_365'
+                );
+                interest = periodResult.interest;
+                disbursementInEmiPeriod = periodResult.disbursedInPeriod;
               } else {
                 // Fallback to monthly calculation if dates not provided
                 const monthlyRate = currentRoi / (12 * 100);
                 interest = Math.round(openingBalance * monthlyRate);
               }
 
-              // Add disbursements for this month (before EMI calculation)
+              // Disbursements in this CALENDAR month (for row display)
               const disbursementThisMonth = disbursementMap[monthKey] || 0;
               const balanceAfterDisbursement = openingBalance + disbursementThisMonth;
               currentBalance = balanceAfterDisbursement;
@@ -557,7 +613,15 @@
               });
 
               currentBalance = closingBalance;
-              
+
+              // Advance the EMI-date balance snapshot. Disbursements in the cycle,
+              // minus EMI principal & prepayment (both paid on the EMI date), give
+              // the balance right after the current EMI is applied.
+              balanceAtPrevEmi = Math.max(
+                0,
+                balanceAtPrevEmi + disbursementInEmiPeriod - emiPrincipal - actualPrepayment
+              );
+
               // Break if balance is effectively zero
               if (closingBalance < 0.01) {
                 console.log(`WITH-PREPAYMENT Loan completed in month ${iteration}: ${monthKey}`);
@@ -627,6 +691,8 @@
             let wpMonth = months.indexOf(loanData.startMonth);
             let wpYear = loanData.startYear;
             let wpIteration = 0;
+            // Mirror of balanceAtPrevEmi for the without-prepayment scenario
+            let wpBalanceAtPrevEmi = initialPrincipal;
 
             let wpDebugCount = 0;
             while ((withoutPrepaymentBalance > 0.01 || hasPendingDisbursements(wpMonth, wpYear)) && wpIteration < maxIterationsWithoutPrep) {
@@ -644,8 +710,9 @@
               const currentRoi = getRoiForMonth(months[wpMonth], wpYear);
               const currentEmi = getEmiForMonth(months[wpMonth], wpYear);
               
-              // Calculate interest on opening balance (BEFORE disbursements - same as main calculation)
+              // Calculate interest for EMI cycle (disbursement-aware) - SAME logic as main loop
               let interest = 0;
+              let wpDisbursementInEmiPeriod = 0;
               if (loanData.emiStartDate) {
                 const emiDay = new Date(loanData.emiStartDate + 'T00:00:00').getDate();
                 let prevEmiDate;
@@ -657,8 +724,15 @@
                   prevEmiDate = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-${String(emiDay).padStart(2, '0')}`;
                 }
                 const currentEmiDate = `${wpYear}-${String(wpMonth + 1).padStart(2, '0')}-${String(emiDay).padStart(2, '0')}`;
-                const daysBetweenEmis = getDaysBetween(prevEmiDate, currentEmiDate);
-                interest = calculateDailyInterest(wpOpeningBalance, currentRoi, daysBetweenEmis, loanData.dayCountBasis || 'ACT_365');
+                const periodResult = computePeriodInterest(
+                  prevEmiDate,
+                  currentEmiDate,
+                  wpBalanceAtPrevEmi,
+                  currentRoi,
+                  loanData.dayCountBasis || 'ACT_365'
+                );
+                interest = periodResult.interest;
+                wpDisbursementInEmiPeriod = periodResult.disbursedInPeriod;
               } else {
                 const monthlyRate = currentRoi / (12 * 100);
                 interest = Math.round(wpOpeningBalance * monthlyRate);
@@ -701,6 +775,12 @@
                 // Update balance (NO prepayments applied here)
                 withoutPrepaymentBalance = Math.max(0, wpBalanceAfterDisbursement - wpEmiPrincipal);
               }
+
+              // Advance the EMI-date balance snapshot for the without-prepayment scenario
+              wpBalanceAtPrevEmi = Math.max(
+                0,
+                wpBalanceAtPrevEmi + wpDisbursementInEmiPeriod - wpEmiPrincipal
+              );
               
               withoutPrepaymentInterestTotal += interest;
               withoutPrepaymentMonths++;
