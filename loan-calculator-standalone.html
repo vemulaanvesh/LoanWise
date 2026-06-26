@@ -455,7 +455,17 @@
             // This is different from the calendar-month closing balance when disbursements
             // happen after the EMI day within a calendar month (e.g., EMI on the 10th,
             // disbursement on the 22nd — the disbursement belongs to the NEXT EMI cycle).
-            let balanceAtPrevEmi = initialPrincipal;
+            //
+            // Seed the interest-bearing balance with any disbursements made on or before the
+            // first EMI date. The first EMI cycle is zero-length (prevEmiDate === emiStartDate),
+            // and computePeriodInterest only counts disbursements dated strictly AFTER the cycle
+            // start, so without this seed the opening disbursement would never accrue interest.
+            const disbursedOnOrBeforeEmiStart = (loanData.emiStartDate && hasDisbursements)
+              ? parsedDisbursements
+                  .filter(d => d.dateObj <= new Date(loanData.emiStartDate + 'T00:00:00'))
+                  .reduce((sum, d) => sum + d.amount, 0)
+              : 0;
+            let balanceAtPrevEmi = initialPrincipal + disbursedOnOrBeforeEmiStart;
 
             while ((currentBalance > 0.01 || hasPendingDisbursements(currentMonth, currentYear)) && iteration < maxIterations) {
               iteration++;
@@ -513,9 +523,11 @@
               const totalDue = balanceAfterDisbursement + interest;
               
               if (totalDue <= currentEmi) {
-                // Last month - pay remaining balance + interest
+                // Last month - pay off the entire outstanding balance (including any
+                // disbursement received this month) plus interest. Principal repaid is
+                // the full post-disbursement balance, not just the opening balance.
                 actualEMI = totalDue;
-                emiPrincipal = openingBalance;
+                emiPrincipal = balanceAfterDisbursement;
               } else {
                 // Normal month
                 actualEMI = currentEmi;
@@ -622,14 +634,17 @@
                 balanceAtPrevEmi + disbursementInEmiPeriod - emiPrincipal - actualPrepayment
               );
 
-              // Break if balance is effectively zero
-              if (closingBalance < 0.01) {
+              // Move to the next month before deciding whether to stop.
+              currentMonth = (currentMonth + 1) % 12;
+              if (currentMonth === 0) currentYear++;
+
+              // Stop only when the balance is cleared AND there are no future
+              // disbursements still scheduled. Breaking purely on a zero balance
+              // would silently drop disbursements that land in later months.
+              if (closingBalance < 0.01 && !hasPendingDisbursements(currentMonth, currentYear)) {
                 console.log(`WITH-PREPAYMENT Loan completed in month ${iteration}: ${monthKey}`);
                 break;
               }
-              
-              currentMonth = (currentMonth + 1) % 12;
-              if (currentMonth === 0) currentYear++;
             }
 
             // Calculate theoretical tenure using EMI formula (bank's method)
@@ -692,7 +707,8 @@
             let wpYear = loanData.startYear;
             let wpIteration = 0;
             // Mirror of balanceAtPrevEmi for the without-prepayment scenario
-            let wpBalanceAtPrevEmi = initialPrincipal;
+            // (seeded identically so both scenarios charge interest on opening disbursements).
+            let wpBalanceAtPrevEmi = initialPrincipal + disbursedOnOrBeforeEmiStart;
 
             let wpDebugCount = 0;
             while ((withoutPrepaymentBalance > 0.01 || hasPendingDisbursements(wpMonth, wpYear)) && wpIteration < maxIterationsWithoutPrep) {
